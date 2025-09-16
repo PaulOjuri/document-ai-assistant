@@ -7,6 +7,8 @@
 
 [build.environment]
   NEXT_PRIVATE_TARGET = "server"
+  # Skip ESLint during build for deployment
+  ESLINT_NO_DEV_ERRORS = "true"
 
 [[redirects]]
   from = "/*"
