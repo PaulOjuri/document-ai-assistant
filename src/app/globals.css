@@ -3,11 +3,42 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+
+  /* Green Theme Colors */
+  --primary-green: #10B981;
+  --dark-green: #059669;
+  --light-green: #ecfdf5;
+  --accent-blue: #3B82F6;
+  --warning-amber: #F59E0B;
+  --error-red: #EF4444;
+
+  /* Extended palette */
+  --muted: #f9fafb;
+  --muted-foreground: #6b7280;
+  --border: #e5e7eb;
+  --input: #ffffff;
+  --card: #ffffff;
+  --card-foreground: #171717;
+  --secondary: #f3f4f6;
+  --secondary-foreground: #374151;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-primary: var(--primary-green);
+  --color-primary-dark: var(--dark-green);
+  --color-primary-light: var(--light-green);
+  --color-accent: var(--accent-blue);
+  --color-warning: var(--warning-amber);
+  --color-error: var(--error-red);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -16,11 +47,57 @@
   :root {
     --background: #0a0a0a;
     --foreground: #ededed;
+    --muted: #111827;
+    --muted-foreground: #9ca3af;
+    --border: #374151;
+    --input: #1f2937;
+    --card: #111827;
+    --card-foreground: #ededed;
+    --secondary: #1f2937;
+    --secondary-foreground: #d1d5db;
   }
+}
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: system-ui, -apple-system, sans-serif;
+  line-height: 1.6;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Force full height layout without gaps */
+#__next {
+  height: 100%;
+}
+
+.main-layout-container {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.main-content-area {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }

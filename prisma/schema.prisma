@@ -1,0 +1,110 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String @id @default(cuid())
+  email     String @unique
+  name      String
+  role      String? // Product Owner, Product Manager, etc.
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  folders   Folder[]
+  documents Document[]
+  notes     Note[]
+  audios    Audio[]
+  chats     Chat[]
+
+  @@map("users")
+}
+
+model Folder {
+  id          String @id @default(cuid())
+  name        String
+  parentId    String?
+  parent      Folder? @relation("FolderHierarchy", fields: [parentId], references: [id])
+  children    Folder[] @relation("FolderHierarchy")
+  safeArtifact String? // Epic, Feature, Capability, etc.
+  userId      String
+  user        User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  documents   Document[]
+
+  @@map("folders")
+}
+
+model Document {
+  id          String @id @default(cuid())
+  title       String
+  content     String
+  fileUrl     String
+  fileType    String
+  embedding   Float[] // Vector embedding for search
+  tags        String[] // SAFe/Agile tags
+  artifactType String? // User Story, Feature, Epic, etc.
+  priority    String? // High, Medium, Low
+  folderId    String?
+  folder      Folder? @relation(fields: [folderId], references: [id])
+  userId      String
+  user        User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("documents")
+}
+
+model Note {
+  id          String @id @default(cuid())
+  title       String
+  content     String // Rich text JSON
+  template    String? // meeting-notes, user-story, retrospective, etc.
+  tags        String[]
+  embedding   Float[]
+  linkedDocs  String[] // IDs of linked documents
+  userId      String
+  user        User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("notes")
+}
+
+model Audio {
+  id            String @id @default(cuid())
+  title         String
+  fileUrl       String
+  duration      Int
+  transcription String?
+  meetingType   String? // sprint-planning, retrospective, pi-planning, etc.
+  participants  String[]
+  embedding     Float[]
+  userId        String
+  user          User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("audios")
+}
+
+model Chat {
+  id        String @id @default(cuid())
+  messages  Json[] // Array of message objects
+  context   String[] // Document IDs used for context
+  userId    String
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("chats")
+}
