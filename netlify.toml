@@ -1,19 +1,14 @@
 [build]
-  command = "npm run build"
+  command = "npm ci && npm run build"
   publish = ".next"
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
 [build.environment]
-  NEXT_PRIVATE_TARGET = "server"
-  # Skip ESLint during build for deployment
-  ESLINT_NO_DEV_ERRORS = "true"
-
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
+  NODE_VERSION = "18"
+  NPM_FLAGS = "--prefer-offline --no-audit"
+  NEXT_TELEMETRY_DISABLED = "1"
 
 [context.production.environment]
   NODE_ENV = "production"
