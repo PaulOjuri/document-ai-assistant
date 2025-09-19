@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Folder, FolderPlus, Plus, Edit, Trash2, ChevronRight, ChevronDown, MessageSquare, FileText, CheckSquare, Settings, ArrowLeft } from 'lucide-react';
+import { Folder, FolderPlus, Plus, Edit, Trash2, ChevronRight, ChevronDown, MessageSquare, FileText, CheckSquare, Settings, ArrowLeft, GripVertical, ExternalLink, Eye, MoveHorizontal, X } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,9 +15,11 @@ import { MainLayout } from '@/components/layout/main-layout';
 import { Database } from '@/lib/supabase/database.types';
 
 type FolderRow = Database['public']['Tables']['folders']['Row'];
+type DocumentRow = Database['public']['Tables']['documents']['Row'];
 
 interface FolderWithChildren extends FolderRow {
   children: FolderWithChildren[];
+  documents?: DocumentRow[];
   document_count?: number;
   note_count?: number;
   todo_count?: number;
@@ -37,7 +39,7 @@ const PRESET_FOLDERS: PresetFolder[] = [
   }
 ];
 
-const FEATURE_SUBFOLDERS = ['Contexts', 'Meeting Transcripts', 'User Stories'];
+const FEATURE_SUBFOLDERS = ['Contexts', 'Meeting Summaries', 'User Stories'];
 
 export function FoldersClient() {
   const [folders, setFolders] = useState<FolderWithChildren[]>([]);
@@ -47,6 +49,11 @@ export function FoldersClient() {
   const [newFolderName, setNewFolderName] = useState('');
   const [selectedParentId, setSelectedParentId] = useState<string>('no-parent');
   const [folderType, setFolderType] = useState<'feature' | 'general' | 'custom'>('custom');
+  const [draggedDocument, setDraggedDocument] = useState<DocumentRow | null>(null);
+  const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
+  const [unassignedDocuments, setUnassignedDocuments] = useState<DocumentRow[]>([]);
+  const [selectedFolderDetail, setSelectedFolderDetail] = useState<FolderWithChildren | null>(null);
+  const [folderDetailOpen, setFolderDetailOpen] = useState(false);
   const { user } = useAuth();
   const supabase = createSupabaseClient();
 
@@ -71,8 +78,9 @@ export function FoldersClient() {
           .order('name'),
         supabase
           .from('documents')
-          .select('folder_id')
-          .eq('user_id', user.id),
+          .select('*')
+          .eq('user_id', user.id)
+          .order('title'),
         supabase
           .from('notes')
           .select('folder_id')
@@ -92,13 +100,15 @@ export function FoldersClient() {
 
       // Calculate counts for each folder
       const folderStats = folders.reduce((acc, folder) => {
+        const folderDocs = documents.filter(d => d.folder_id === folder.id);
         acc[folder.id] = {
-          document_count: documents.filter(d => d.folder_id === folder.id).length,
+          documents: folderDocs,
+          document_count: folderDocs.length,
           note_count: notes.filter(n => n.folder_id === folder.id).length,
           todo_count: todos.filter(t => t.folder_id === folder.id).length,
         };
         return acc;
-      }, {} as Record<string, { document_count: number; note_count: number; audio_count: number }>);
+      }, {} as Record<string, { documents: DocumentRow[]; document_count: number; note_count: number; todo_count: number }>);
 
       // Build folder tree
       const foldersWithStats: FolderWithChildren[] = folders.map(folder => ({
@@ -124,6 +134,10 @@ export function FoldersClient() {
       });
 
       setFolders(rootFolders);
+
+      // Load unassigned documents (documents with no folder_id)
+      const unassignedDocs = documents.filter(doc => !doc.folder_id);
+      setUnassignedDocuments(unassignedDocs);
     } catch (error) {
       console.error('Error loading folders:', error);
     } finally {
@@ -185,7 +199,7 @@ export function FoldersClient() {
             await supabase
               .from('folders')
               .insert([{
-                name: subfolderName,
+                name: `${subfolderName} - ${mainFolder.name}`,
                 parent_id: mainFolder.id,
                 user_id: user.id,
               }]);
@@ -251,6 +265,116 @@ export function FoldersClient() {
     setExpandedFolders(newExpanded);
   };
 
+  const handleDragStart = (e: React.DragEvent, document: DocumentRow) => {
+    setDraggedDocument(document);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent, folderId: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverFolder(folderId);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX;
+    const y = e.clientY;
+
+    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+      setDragOverFolder(null);
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent, targetFolderId: string) => {
+    e.preventDefault();
+    setDragOverFolder(null);
+
+    if (!draggedDocument) return;
+
+    try {
+      const response = await fetch(`/api/documents/${draggedDocument.id}/folder`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          folderId: targetFolderId === 'unassigned' ? null : targetFolderId,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to move document');
+      }
+
+      // Reload folders to update the UI
+      await loadFolders();
+
+      // Update folder detail view if it's open
+      if (selectedFolderDetail) {
+        const updatedFolder = getAllFolders(folders).find(f => f.id === selectedFolderDetail.id);
+        if (updatedFolder) {
+          setSelectedFolderDetail(updatedFolder);
+        }
+      }
+    } catch (error) {
+      console.error('Error moving document:', error);
+    } finally {
+      setDraggedDocument(null);
+    }
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  const getFileTypeIcon = (fileType: string) => {
+    if (fileType.includes('pdf')) return '📄';
+    if (fileType.includes('word') || fileType.includes('doc')) return '📝';
+    if (fileType.includes('text')) return '📄';
+    if (fileType.includes('image')) return '🖼️';
+    return '📎';
+  };
+
+  const handleFolderDoubleClick = (folder: FolderWithChildren) => {
+    console.log('Double-click triggered for folder:', folder.name);
+    setSelectedFolderDetail(folder);
+    setFolderDetailOpen(true);
+  };
+
+  const handleMoveDocument = async (document: DocumentRow, targetFolderId: string | null) => {
+    try {
+      const response = await fetch(`/api/documents/${document.id}/folder`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          folderId: targetFolderId,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to move document');
+      }
+
+      // Reload folders and update detail view
+      await loadFolders();
+      if (selectedFolderDetail) {
+        const updatedFolder = getAllFolders(folders).find(f => f.id === selectedFolderDetail.id);
+        if (updatedFolder) {
+          setSelectedFolderDetail(updatedFolder);
+        }
+      }
+    } catch (error) {
+      console.error('Error moving document:', error);
+    }
+  };
+
   const renderFolder = (folder: FolderWithChildren, level: number = 0) => {
     const isExpanded = expandedFolders.has(folder.id);
     const hasChildren = folder.children.length > 0;
@@ -261,7 +385,10 @@ export function FoldersClient() {
         <div
           className={`flex items-center justify-between p-3 rounded-lg border transition-colors hover:bg-[var(--muted)] ${
             level > 0 ? 'ml-6 border-l-2 border-[var(--primary-green)]' : ''
-          }`}
+          } ${dragOverFolder === folder.id ? 'bg-[var(--primary-green)]/10 border-[var(--primary-green)]' : ''}`}
+          onDragOver={(e) => handleDragOver(e, folder.id)}
+          onDragLeave={handleDragLeave}
+          onDrop={(e) => handleDrop(e, folder.id)}
         >
           <div className="flex items-center space-x-3 flex-1">
             {hasChildren ? (
@@ -281,7 +408,13 @@ export function FoldersClient() {
 
             <Folder className="w-5 h-5 text-[var(--primary-green)]" />
 
-            <div className="flex-1">
+            <div
+              className="flex-1 cursor-pointer"
+              onDoubleClick={(e) => {
+                e.stopPropagation();
+                handleFolderDoubleClick(folder);
+              }}
+            >
               <div className="flex items-center space-x-2">
                 <span className="font-medium">{folder.name}</span>
                 {folder.name === 'General Context' && (
@@ -290,7 +423,7 @@ export function FoldersClient() {
                     System
                   </Badge>
                 )}
-                {folder.parent_id && FEATURE_SUBFOLDERS.includes(folder.name) && (
+                {folder.parent_id && FEATURE_SUBFOLDERS.some(subfolder => folder.name.startsWith(subfolder)) && (
                   <Badge variant="outline" className="text-xs">
                     Feature Sub
                   </Badge>
@@ -379,9 +512,67 @@ export function FoldersClient() {
           </div>
         </div>
 
-        {hasChildren && isExpanded && (
+        {isExpanded && (
           <div className="mt-2 space-y-2">
-            {folder.children.map(child => renderFolder(child, level + 1))}
+            {/* Render child folders first */}
+            {hasChildren && (
+              <div className="space-y-2">
+                {folder.children.map(child => renderFolder(child, level + 1))}
+              </div>
+            )}
+
+            {/* Render documents in this folder */}
+            {folder.documents && folder.documents.length > 0 && (
+              <div className={`space-y-1 ${level > 0 ? 'ml-6' : ''}`}>
+                <div className="text-xs text-[var(--muted-foreground)] font-medium mb-2 flex items-center space-x-1">
+                  <FileText className="w-3 h-3" />
+                  <span>Documents ({folder.documents.length})</span>
+                </div>
+                {folder.documents.map(document => (
+                  <div
+                    key={document.id}
+                    className="flex items-center justify-between p-2 rounded border border-[var(--border)] bg-[var(--card)] cursor-move hover:bg-[var(--muted)] transition-colors"
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, document)}
+                  >
+                    <div className="flex items-center space-x-3 flex-1 min-w-0">
+                      <GripVertical className="w-4 h-4 text-[var(--muted-foreground)] flex-shrink-0" />
+                      <span className="text-lg">{getFileTypeIcon(document.file_type)}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm truncate">{document.title}</div>
+                        <div className="text-xs text-[var(--muted-foreground)] flex items-center space-x-2">
+                          <span>{formatFileSize(document.file_size)}</span>
+                          <span>•</span>
+                          <span>{document.file_type}</span>
+                          {document.tags && document.tags.length > 0 && (
+                            <>
+                              <span>•</span>
+                              <div className="flex items-center space-x-1">
+                                {document.tags.slice(0, 2).map(tag => (
+                                  <Badge key={tag} variant="outline" className="text-xs px-1 py-0">
+                                    {tag}
+                                  </Badge>
+                                ))}
+                                {document.tags.length > 2 && (
+                                  <span className="text-xs">+{document.tags.length - 2}</span>
+                                )}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-1">
+                      <Link href={`/documents?id=${document.id}`}>
+                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                          <ExternalLink className="w-3 h-3" />
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -455,7 +646,7 @@ export function FoldersClient() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="feature">Feature Folder (with Contexts, Meeting Transcripts, User Stories)</SelectItem>
+                      <SelectItem value="feature">Feature Folder (with Contexts, Meeting Summaries, User Stories)</SelectItem>
                       <SelectItem value="general">General Context Folder</SelectItem>
                       <SelectItem value="custom">Custom Folder</SelectItem>
                     </SelectContent>
@@ -499,9 +690,9 @@ export function FoldersClient() {
                     <p className="text-sm font-medium mb-2">This will create:</p>
                     <ul className="text-sm text-[var(--muted-foreground)] space-y-1">
                       <li>• {newFolderName || 'Feature Name'}</li>
-                      <li className="ml-4">• Contexts</li>
-                      <li className="ml-4">• Meeting Transcripts</li>
-                      <li className="ml-4">• User Stories</li>
+                      <li className="ml-4">• Contexts - {newFolderName || 'Feature Name'}</li>
+                      <li className="ml-4">• Meeting Summaries - {newFolderName || 'Feature Name'}</li>
+                      <li className="ml-4">• User Stories - {newFolderName || 'Feature Name'}</li>
                     </ul>
                   </div>
                 )}
@@ -577,7 +768,7 @@ export function FoldersClient() {
           </CardHeader>
           <CardContent>
             <p className="text-sm text-[var(--muted-foreground)] mb-3">
-              Create feature-based folders with sub-organization for contexts, transcripts, and stories.
+              Create feature-based folders with sub-organization for contexts, meeting summaries, and user stories.
             </p>
             <Button
               onClick={() => {
@@ -641,6 +832,63 @@ export function FoldersClient() {
         </CardContent>
       </Card>
 
+      {/* Unassigned Documents */}
+      {unassignedDocuments.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <FileText className="w-5 h-5" />
+                <span>Unassigned Documents</span>
+                <Badge variant="secondary">{unassignedDocuments.length}</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div
+                className={`space-y-1 p-3 rounded-lg border-2 border-dashed transition-colors ${
+                  dragOverFolder === 'unassigned'
+                    ? 'border-[var(--primary-green)] bg-[var(--primary-green)]/10'
+                    : 'border-[var(--border)]'
+                }`}
+                onDragOver={(e) => handleDragOver(e, 'unassigned')}
+                onDragLeave={handleDragLeave}
+                onDrop={(e) => handleDrop(e, 'unassigned')}
+              >
+                <div className="text-xs text-[var(--muted-foreground)] mb-2">
+                  Drop documents here to remove from folders
+                </div>
+                {unassignedDocuments.map(document => (
+                  <div
+                    key={document.id}
+                    className="flex items-center justify-between p-2 rounded border border-[var(--border)] bg-[var(--card)] cursor-move hover:bg-[var(--muted)] transition-colors"
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, document)}
+                  >
+                    <div className="flex items-center space-x-3 flex-1 min-w-0">
+                      <GripVertical className="w-4 h-4 text-[var(--muted-foreground)] flex-shrink-0" />
+                      <span className="text-lg">{getFileTypeIcon(document.file_type)}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm truncate">{document.title}</div>
+                        <div className="text-xs text-[var(--muted-foreground)] flex items-center space-x-2">
+                          <span>{formatFileSize(document.file_size)}</span>
+                          <span>•</span>
+                          <span>{document.file_type}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-1">
+                      <Link href={`/documents?id=${document.id}`}>
+                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                          <ExternalLink className="w-3 h-3" />
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+      )}
+
       {/* AI Integration Note */}
       <Card className="border-[var(--border)] bg-[var(--muted)]">
         <CardContent className="p-4">
@@ -654,6 +902,170 @@ export function FoldersClient() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Folder Detail Modal */}
+      <Dialog open={folderDetailOpen} onOpenChange={setFolderDetailOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center space-x-2">
+              <Folder className="w-5 h-5 text-[var(--primary-green)]" />
+              <span>{selectedFolderDetail?.name}</span>
+              {selectedFolderDetail?.documents && (
+                <Badge variant="secondary">
+                  {selectedFolderDetail.documents.length} documents
+                </Badge>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+
+          {selectedFolderDetail && (
+            <div className="space-y-4">
+              {/* Folder Info */}
+              <div className="flex items-center space-x-4 text-sm text-[var(--muted-foreground)] bg-[var(--muted)] p-3 rounded-lg">
+                <div className="flex items-center space-x-1">
+                  <FileText className="w-4 h-4" />
+                  <span>{selectedFolderDetail.document_count || 0} documents</span>
+                </div>
+                <div className="flex items-center space-x-1">
+                  <MessageSquare className="w-4 h-4" />
+                  <span>{selectedFolderDetail.note_count || 0} notes</span>
+                </div>
+                <div className="flex items-center space-x-1">
+                  <CheckSquare className="w-4 h-4" />
+                  <span>{selectedFolderDetail.todo_count || 0} todos</span>
+                </div>
+              </div>
+
+              {/* Documents List */}
+              {selectedFolderDetail.documents && selectedFolderDetail.documents.length > 0 ? (
+                <div className="space-y-2">
+                  <h3 className="font-medium text-sm text-[var(--muted-foreground)]">Documents</h3>
+                  <div className="space-y-2">
+                    {selectedFolderDetail.documents.map(document => (
+                      <div
+                        key={document.id}
+                        className="flex items-center justify-between p-3 rounded-lg border bg-[var(--card)] hover:bg-[var(--muted)] transition-colors"
+                      >
+                        <div className="flex items-center space-x-3 flex-1 min-w-0">
+                          <span className="text-lg">{getFileTypeIcon(document.file_type)}</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-sm truncate">{document.title}</div>
+                            <div className="text-xs text-[var(--muted-foreground)] flex items-center space-x-2">
+                              <span>{formatFileSize(document.file_size)}</span>
+                              <span>•</span>
+                              <span>{document.file_type}</span>
+                              {document.tags && document.tags.length > 0 && (
+                                <>
+                                  <span>•</span>
+                                  <div className="flex items-center space-x-1">
+                                    {document.tags.slice(0, 2).map(tag => (
+                                      <Badge key={tag} variant="outline" className="text-xs px-1 py-0">
+                                        {tag}
+                                      </Badge>
+                                    ))}
+                                    {document.tags.length > 2 && (
+                                      <span className="text-xs">+{document.tags.length - 2}</span>
+                                    )}
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex items-center space-x-2">
+                          {/* Move Button */}
+                          <Dialog>
+                            <DialogTrigger asChild>
+                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                <MoveHorizontal className="w-4 h-4" />
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                              <DialogHeader>
+                                <DialogTitle>Move Document</DialogTitle>
+                              </DialogHeader>
+                              <div className="space-y-4">
+                                <p className="text-sm text-[var(--muted-foreground)]">
+                                  Select a destination folder for &quot;{document.title}&quot;
+                                </p>
+                                <Select
+                                  onValueChange={(value) => {
+                                    handleMoveDocument(document, value === 'unassigned' ? null : value);
+                                  }}
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Select destination folder..." />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="unassigned">Unassigned (No folder)</SelectItem>
+                                    {allFolders
+                                      .filter(f => f.id !== selectedFolderDetail.id)
+                                      .map((folder) => (
+                                        <SelectItem key={folder.id} value={folder.id}>
+                                          {folder.name}
+                                        </SelectItem>
+                                      ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </DialogContent>
+                          </Dialog>
+
+                          {/* View Button */}
+                          <Link href={`/documents?id=${document.id}`}>
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                              <Eye className="w-4 h-4" />
+                            </Button>
+                          </Link>
+
+                          {/* Edit Button */}
+                          <Link href={`/documents?id=${document.id}&edit=true`}>
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                          </Link>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-[var(--muted-foreground)]">
+                  <FileText className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                  <p>No documents in this folder</p>
+                  <p className="text-sm">Drag documents here from other folders or upload new ones</p>
+                </div>
+              )}
+
+              {/* Child Folders */}
+              {selectedFolderDetail.children && selectedFolderDetail.children.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="font-medium text-sm text-[var(--muted-foreground)]">Subfolders</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {selectedFolderDetail.children.map(childFolder => (
+                      <div
+                        key={childFolder.id}
+                        className="flex items-center space-x-2 p-2 rounded border bg-[var(--card)] hover:bg-[var(--muted)] cursor-pointer transition-colors"
+                        onDoubleClick={() => {
+                          setSelectedFolderDetail(childFolder);
+                        }}
+                      >
+                        <Folder className="w-4 h-4 text-[var(--primary-green)]" />
+                        <span className="text-sm font-medium truncate">{childFolder.name}</span>
+                        <div className="ml-auto text-xs text-[var(--muted-foreground)]">
+                          {(childFolder.document_count || 0) + (childFolder.note_count || 0) + (childFolder.todo_count || 0)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
         </div>
       </div>
     </MainLayout>
