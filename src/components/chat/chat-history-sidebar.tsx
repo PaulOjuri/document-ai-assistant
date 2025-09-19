@@ -7,9 +7,9 @@ import { Card, CardContent } from '@/components/ui/card';
 import { useChatHistory } from '@/hooks/useChatHistory';
 
 interface ChatHistorySidebarProps {
-  onChatSelect?: (chatId: string, messages: any[]) => void;
+  onChatSelect?: (chatId: string, messages: Array<{ role: string; content: string; timestamp: Date }>) => void;
   onNewChat?: () => void;
-  onArchiveAndNew?: (currentMessages: any[]) => void;
+  onArchiveAndNew?: (currentMessages: Array<{ role: string; content: string; timestamp: Date }>) => void;
 }
 
 export function ChatHistorySidebar({ onChatSelect, onNewChat, onArchiveAndNew }: ChatHistorySidebarProps) {
@@ -55,7 +55,7 @@ export function ChatHistorySidebar({ onChatSelect, onNewChat, onArchiveAndNew }:
     }
   };
 
-  const getPreviewText = (messages: any[]) => {
+  const getPreviewText = (messages: Array<{ role: string; content: string; timestamp?: Date | string }>) => {
     const userMessages = messages.filter(m => m.role === 'user');
     if (userMessages.length === 0) return 'New conversation';
     const lastUserMessage = userMessages[userMessages.length - 1];

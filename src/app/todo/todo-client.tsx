@@ -42,10 +42,10 @@ export function TodoClientPage({ initialTodos }: TodoClientProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterPriority, setFilterPriority] = useState<string>('all');
-  const [detectedTodos, setDetectedTodos] = useState<any[]>([]);
+  const [detectedTodos, setDetectedTodos] = useState<Array<Todo & { sourceTitle: string }>>([]);
   const [isDetecting, setIsDetecting] = useState(false);
-  const [documents, setDocuments] = useState<any[]>([]);
-  const [notes, setNotes] = useState<any[]>([]);
+  const [documents, setDocuments] = useState<Array<{ id: string; title: string; content: string }>>([]);
+  const [notes, setNotes] = useState<Array<{ id: string; title: string; content: string }>>([]);
 
   // Form states for creating new todos
   const [newTodoTitle, setNewTodoTitle] = useState('');
@@ -96,7 +96,7 @@ export function TodoClientPage({ initialTodos }: TodoClientProps) {
     }
   };
 
-  const handleSmartDetection = async (contentItems: any[]) => {
+  const handleSmartDetection = async (contentItems: Array<{ id: string; title: string; content: string }>) => {
     setIsDetecting(true);
     setDetectedTodos([]);
 
@@ -119,7 +119,7 @@ export function TodoClientPage({ initialTodos }: TodoClientProps) {
         if (response.ok) {
           const data = await response.json();
           if (data.todos && data.todos.length > 0) {
-            allDetectedTodos.push(...data.todos.map((todo: any) => ({
+            allDetectedTodos.push(...data.todos.map((todo: { title: string; description?: string; priority: string; due_date?: string }) => ({
               ...todo,
               sourceTitle: item.title,
               sourceId: item.id
@@ -136,7 +136,7 @@ export function TodoClientPage({ initialTodos }: TodoClientProps) {
     }
   };
 
-  const handleCreateDetectedTodos = async (todosToCreate: any[]) => {
+  const handleCreateDetectedTodos = async (todosToCreate: Array<Todo & { sourceTitle: string }>) => {
     try {
       const response = await fetch('/api/create-todos', {
         method: 'POST',
@@ -383,7 +383,7 @@ export function TodoClientPage({ initialTodos }: TodoClientProps) {
                                     {todo.priority}
                                   </Badge>
                                   <span className="text-xs text-muted-foreground">
-                                    from "{todo.sourceTitle}"
+                                    from &quot;{todo.sourceTitle}&quot;
                                   </span>
                                 </div>
                               </div>

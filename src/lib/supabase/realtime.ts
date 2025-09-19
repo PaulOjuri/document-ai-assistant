@@ -23,7 +23,7 @@ export interface RealtimeEventCallbacks {
 
 export class RealtimeService {
   private supabase = createSupabaseClient();
-  private subscriptions: Map<string, any> = new Map();
+  private subscriptions: Map<string, ReturnType<typeof this.supabase.channel>> = new Map();
 
   subscribeToDocuments(userId: string, callbacks: RealtimeEventCallbacks) {
     const subscription = this.supabase

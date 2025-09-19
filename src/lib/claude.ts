@@ -99,7 +99,7 @@ Please provide:
     return this.chat(prompt);
   }
 
-  async suggestBacklogImprovements(backlogItems: any[]): Promise<ClaudeResponse> {
+  async suggestBacklogImprovements(backlogItems: Array<{ title: string; artifactType?: string; priority?: string; content: string }>): Promise<ClaudeResponse> {
     const itemsText = backlogItems.map(item => `
 Title: ${item.title}
 Type: ${item.artifactType || 'Unknown'}

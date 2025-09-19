@@ -53,7 +53,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Create new folder
-    const folderData: any = {
+    const folderData: {
+      name: string;
+      user_id: string;
+      parent_id?: string;
+      safe_artifact?: boolean;
+    } = {
       name: name.trim(),
       user_id: user.id,
     };

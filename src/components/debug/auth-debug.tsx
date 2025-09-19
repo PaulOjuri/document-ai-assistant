@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { createSupabaseClient } from '@/lib/supabase/client';
 
 export function AuthDebug() {
-  const [authState, setAuthState] = useState<any>({});
+  const [authState, setAuthState] = useState<{ hasSession?: boolean; error?: string; url?: string; key?: string }>({});
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -25,8 +25,8 @@ export function AuthDebug() {
         if (testError) {
           setError(testError.message);
         }
-      } catch (err: any) {
-        setError(err.message || 'Unknown error');
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : 'Unknown error');
       }
     };
 

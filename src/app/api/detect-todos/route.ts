@@ -83,12 +83,12 @@ Important: Only return valid, actionable todos. Skip general statements or compl
     }
 
     // Validate and clean up the detected todos
-    const validTodos = detectedTodos.filter((todo: any) =>
+    const validTodos = detectedTodos.filter((todo: { title?: string; description?: string; priority?: string; due_date?: string }) =>
       todo.title &&
       typeof todo.title === 'string' &&
       todo.title.trim().length > 0 &&
       todo.title.length <= 100
-    ).map((todo: any) => ({
+    ).map((todo: { title: string; description?: string; priority?: string; due_date?: string }) => ({
       title: todo.title.trim(),
       description: todo.description?.trim() || null,
       priority: ['High', 'Medium', 'Low'].includes(todo.priority) ? todo.priority : 'Medium',

@@ -22,7 +22,7 @@ interface SearchResult {
   title: string;
   content?: string;
   snippet?: string;
-  metadata?: any;
+  metadata?: Record<string, unknown>;
 }
 
 interface SearchFilters {
@@ -320,7 +320,7 @@ export function SearchInterface({
               </div>
             ) : query ? (
               <div className="p-4 text-center text-[var(--muted-foreground)]">
-                No results found for "{query}"
+                No results found for &quot;{query}&quot;
               </div>
             ) : null}
           </CardContent>

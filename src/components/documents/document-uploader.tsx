@@ -28,7 +28,7 @@ interface Folder {
 
 interface DocumentUploaderProps {
   folderId?: string;
-  onUploadComplete?: (documents: any[]) => void;
+  onUploadComplete?: (documents: Array<{ id: string; title: string; content: string }>) => void;
   onClose?: () => void;
 }
 
@@ -207,11 +207,11 @@ export function DocumentUploader({ folderId, onUploadComplete, onClose }: Docume
 
         uploadedDocuments.push(documentData);
 
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error('Upload error:', error);
         setFiles(prev => prev.map(f =>
           f.id === uploadFile.id
-            ? { ...f, status: 'error', error: error.message }
+            ? { ...f, status: 'error', error: error instanceof Error ? error.message : 'Upload failed' }
             : f
         ));
       }

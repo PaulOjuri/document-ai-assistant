@@ -135,7 +135,7 @@ export function FoldersClient() {
     if (!user || !newFolderName.trim()) return;
 
     try {
-      let foldersToCreate: Array<{ name: string; parent_id?: string }> = [];
+      const foldersToCreate: Array<{ name: string; parent_id?: string }> = [];
 
       if (folderType === 'feature') {
         // Create feature folder with subfolders
@@ -339,7 +339,7 @@ export function FoldersClient() {
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>Create Subfolder in "{folder.name}"</DialogTitle>
+                  <DialogTitle>Create Subfolder in &quot;{folder.name}&quot;</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4">
                   <div>

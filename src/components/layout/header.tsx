@@ -14,7 +14,7 @@ interface Notification {
   type: string;
   title: string;
   message?: string;
-  data?: any;
+  data?: Record<string, unknown>;
   read: boolean;
   created_at: string;
 }
@@ -116,7 +116,7 @@ export function Header() {
     return date.toLocaleDateString();
   };
 
-  const handleSearchResult = (result: any) => {
+  const handleSearchResult = (result: { type: string; id: string; title: string }) => {
     // Handle search result selection
     console.log('Selected search result:', result);
     // You can navigate to the result or open a modal here
@@ -162,7 +162,7 @@ export function Header() {
       <div className="flex-1 max-w-md mx-8">
         <SearchInterface
           onResultSelect={handleSearchResult}
-          placeholder="Search documents, notes, and audio..."
+          placeholder="Search documents, notes, and todos..."
           showFilters={true}
         />
       </div>

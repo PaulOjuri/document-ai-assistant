@@ -4,7 +4,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { MainLayout } from '@/components/layout/main-layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { FileText, Upload, Mic, Users, BarChart3, Calendar, Zap, Bot } from 'lucide-react';
+import { FileText, Upload, CheckSquare, Users, BarChart3, Calendar, Zap, Bot } from 'lucide-react';
 
 export default async function DashboardPage() {
   const supabase = await createSupabaseServerClient();
@@ -18,7 +18,7 @@ export default async function DashboardPage() {
   }
 
   // Fetch user's statistics
-  const [documentsResult, notesResult, audiosResult] = await Promise.all([
+  const [documentsResult, notesResult, todosResult] = await Promise.all([
     supabase
       .from('documents')
       .select('id', { count: 'exact' })
@@ -28,14 +28,14 @@ export default async function DashboardPage() {
       .select('id', { count: 'exact' })
       .eq('user_id', user.id),
     supabase
-      .from('audios')
+      .from('todos')
       .select('id', { count: 'exact' })
       .eq('user_id', user.id),
   ]);
 
   const documentsCount = documentsResult.count || 0;
   const notesCount = notesResult.count || 0;
-  const audiosCount = audiosResult.count || 0;
+  const todosCount = todosResult.count || 0;
 
   return (
     <MainLayout>
@@ -79,13 +79,13 @@ export default async function DashboardPage() {
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Audio Files</CardTitle>
-              <Mic className="h-4 w-4 text-[var(--muted-foreground)]" />
+              <CardTitle className="text-sm font-medium">Active Todos</CardTitle>
+              <CheckSquare className="h-4 w-4 text-[var(--muted-foreground)]" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{audiosCount}</div>
+              <div className="text-2xl font-bold">{todosCount}</div>
               <p className="text-xs text-[var(--muted-foreground)]">
-                Meeting recordings processed
+                Tasks and action items
               </p>
             </CardContent>
           </Card>
@@ -204,13 +204,13 @@ export default async function DashboardPage() {
                 </Link>
               </div>
               <div className="p-4 border border-[var(--border)] rounded-lg">
-                <Mic className="w-8 h-8 text-[var(--warning-amber)] mb-3" />
-                <h3 className="font-medium mb-2">Audio</h3>
+                <CheckSquare className="w-8 h-8 text-[var(--warning-amber)] mb-3" />
+                <h3 className="font-medium mb-2">Todo Management</h3>
                 <p className="text-sm text-[var(--muted-foreground)] mb-3">
-                  Record and transcribe planning sessions, retrospectives, and PI planning.
+                  Create and manage action items with deadlines and smart detection from documents.
                 </p>
-                <Link href="/audio">
-                  <Button size="sm" variant="outline" className="w-full">Audio</Button>
+                <Link href="/todo">
+                  <Button size="sm" variant="outline" className="w-full">Manage Todos</Button>
                 </Link>
               </div>
               <div className="p-4 border border-[var(--border)] rounded-lg">
