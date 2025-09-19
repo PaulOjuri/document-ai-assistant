@@ -9,7 +9,7 @@ import {
   FolderPlus,
   Upload,
   FileText,
-  Mic,
+  CheckSquare,
   ChevronRight,
   ChevronDown,
   Plus,
@@ -94,7 +94,7 @@ export function Sidebar() {
       setLoading(true);
 
       // Load folders and their content counts
-      const [foldersResponse, documentsResponse, notesResponse, audiosResponse] = await Promise.all([
+      const [foldersResponse, documentsResponse, notesResponse] = await Promise.all([
         supabase
           .from('folders')
           .select('id, name, parent_id')
@@ -107,10 +107,6 @@ export function Sidebar() {
         supabase
           .from('notes')
           .select('folder_id')
-          .eq('user_id', user.id),
-        supabase
-          .from('audios')
-          .select('folder_id')
           .eq('user_id', user.id)
       ]);
 
@@ -119,15 +115,13 @@ export function Sidebar() {
       const foldersData = foldersResponse.data || [];
       const documents = documentsResponse.data || [];
       const notes = notesResponse.data || [];
-      const audios = audiosResponse.data || [];
 
       // Calculate total content count for each folder
       const folderCounts = foldersData.reduce((acc, folder) => {
         const docCount = documents.filter(d => d.folder_id === folder.id).length;
         const noteCount = notes.filter(n => n.folder_id === folder.id).length;
-        const audioCount = audios.filter(a => a.folder_id === folder.id).length;
 
-        acc[folder.id] = docCount + noteCount + audioCount;
+        acc[folder.id] = docCount + noteCount;
         return acc;
       }, {} as Record<string, number>);
 
@@ -180,10 +174,10 @@ export function Sidebar() {
               New Note
             </Button>
           </Link>
-          <Link href="/audio">
+          <Link href="/todo">
             <Button className="w-full justify-start" variant="outline">
-              <Mic className="w-4 h-4 mr-2" />
-              Audio
+              <CheckSquare className="w-4 h-4 mr-2" />
+              Todo
             </Button>
           </Link>
           <Link href="/chat">

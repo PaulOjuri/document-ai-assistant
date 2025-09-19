@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { createSupabaseClient } from '@/lib/supabase/client';
 import { useAuth } from '@/components/auth/auth-provider';
+import { MainLayout } from '@/components/layout/main-layout';
 import { Database } from '@/lib/supabase/database.types';
 
 type FolderRow = Database['public']['Tables']['folders']['Row'];
@@ -412,37 +413,30 @@ export function FoldersClient() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <Link href="/dashboard">
-            <Button variant="ghost" size="sm" className="flex items-center space-x-2">
-              <ArrowLeft className="w-4 h-4" />
-              <span>Back to Dashboard</span>
-            </Button>
-          </Link>
-          <div>
-            <h1 className="text-2xl font-bold">Folder Management</h1>
-            <p className="text-[var(--muted-foreground)]">
-              Organize your documents, notes, and audio files by features and contexts
-            </p>
-          </div>
-        </div>
+    <MainLayout>
+      <div className="flex-1 p-8">
+        <div className="max-w-6xl mx-auto space-y-8">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold">Folder Management</h1>
+              <p className="text-muted-foreground mt-2">
+                Organize your documents, notes, and content into folders
+              </p>
+            </div>
+            <div className="flex space-x-2">
+              {!hasGeneralContext && (
+                <Button
+                  onClick={createGeneralContextFolder}
+                  variant="outline"
+                  className="flex items-center space-x-2"
+                >
+                  <Settings className="w-4 h-4" />
+                  <span>Create General Context</span>
+                </Button>
+              )}
 
-        <div className="flex space-x-2">
-          {!hasGeneralContext && (
-            <Button
-              onClick={createGeneralContextFolder}
-              variant="outline"
-              className="flex items-center space-x-2"
-            >
-              <Settings className="w-4 h-4" />
-              <span>Create General Context</span>
-            </Button>
-          )}
-
-          <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+              <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
             <DialogTrigger asChild>
               <Button className="flex items-center space-x-2">
                 <FolderPlus className="w-4 h-4" />
@@ -542,8 +536,8 @@ export function FoldersClient() {
               </div>
             </DialogContent>
           </Dialog>
-        </div>
-      </div>
+            </div>
+          </div>
 
       {/* Quick Actions */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -660,6 +654,8 @@ export function FoldersClient() {
           </div>
         </CardContent>
       </Card>
-    </div>
+        </div>
+      </div>
+    </MainLayout>
   );
 }

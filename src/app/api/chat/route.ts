@@ -41,7 +41,7 @@ For now, I can provide SAFe guidance based on your content using built-in knowle
     }
 
     // Fetch user's content for context with folder information
-    const [documentsResult, notesResult, audiosResult, foldersResult] = await Promise.all([
+    const [documentsResult, notesResult, audiosResult, todosResult, foldersResult] = await Promise.all([
       supabase
         .from('documents')
         .select(`
@@ -73,6 +73,16 @@ For now, I can provide SAFe guidance based on your content using built-in knowle
         .order('updated_at', { ascending: false })
         .limit(15),
       supabase
+        .from('todos')
+        .select(`
+          title, description, status, priority, due_date, source, source_type,
+          folder_id,
+          folders(name, parent_id)
+        `)
+        .eq('user_id', userId)
+        .order('updated_at', { ascending: false })
+        .limit(20),
+      supabase
         .from('folders')
         .select('id, name, parent_id')
         .eq('user_id', userId)
@@ -82,6 +92,7 @@ For now, I can provide SAFe guidance based on your content using built-in knowle
     const documents = documentsResult.data || [];
     const notes = notesResult.data || [];
     const audios = audiosResult.data || [];
+    const todos = todosResult.data || [];
     const folders = foldersResult.data || [];
 
     // Build folder hierarchy for context
@@ -126,6 +137,16 @@ For now, I can provide SAFe guidance based on your content using built-in knowle
         meeting_type: audio.meeting_type,
         participants: audio.participants,
         folder: audio.folder_id ? getFolderPath(audio.folder_id) : 'No folder'
+      })),
+      todos: todos.map(todo => ({
+        title: todo.title,
+        description: todo.description,
+        status: todo.status,
+        priority: todo.priority,
+        due_date: todo.due_date,
+        source: todo.source,
+        source_type: todo.source_type,
+        folder: todo.folder_id ? getFolderPath(todo.folder_id) : 'No folder'
       }))
     };
 
@@ -147,6 +168,7 @@ For now, I can provide SAFe guidance based on your content using built-in knowle
 Documents: ${documents.length} files (${Array.from(new Set(documents.map(d => d.file_type).filter(Boolean))).join(', ')})
 Notes: ${notes.length} entries
 Audio Recordings: ${audios.length} transcriptions
+Todos: ${todos.length} tasks (${todos.filter(t => t.status === 'pending').length} pending, ${todos.filter(t => t.status === 'in_progress').length} in progress, ${todos.filter(t => t.status === 'completed').length} completed)
 
 **Available Content Details:**
 ${JSON.stringify(contextData, null, 2)}
@@ -155,22 +177,40 @@ ${JSON.stringify(contextData, null, 2)}
 
 **Your Role:**
 - Provide actionable SAFe guidance based on the user's actual content
-- Reference specific documents, notes, or audio when relevant
+- Reference specific documents, notes, audio, and todos when relevant
 - Apply SAFe principles to real scenarios
 - Offer concrete recommendations and next steps
 - Help with story writing, backlog prioritization, and planning
 - Identify gaps and improvement opportunities
+- **Manage todos** - analyze current tasks, suggest new ones based on content, help prioritize
+- Extract actionable items from documents and meeting notes to create todos
 - **Create folders** when users request organization or when you recommend organizing content
 - Suggest and implement folder structures for SAFe artifacts (Epics, Features, User Stories, etc.)
 
 **Available Actions:**
-When users ask to create folders or you recommend organization, you can create folders by including this special command in your response:
+
+**1. Create Folders:**
+When users ask to create folders or you recommend organization, include this command:
 **[CREATE_FOLDER: folder_name]**
 
-For example, if you recommend organizing user stories into an "Epic 1 - User Authentication" folder, include:
-**[CREATE_FOLDER: Epic 1 - User Authentication]**
+Example: **[CREATE_FOLDER: Epic 1 - User Authentication]**
 
-The folder will be created automatically and you should mention this in your response.
+**2. Create Todos:**
+When you identify actionable items or users request todo creation, include this command:
+**[CREATE_TODO: title|description|priority|due_date]**
+
+Where:
+- title: Short, actionable title (required)
+- description: Detailed description (optional, use "" if empty)
+- priority: High, Medium, or Low (optional, defaults to Medium)
+- due_date: YYYY-MM-DD format (optional, use "" if no date)
+
+Examples:
+- **[CREATE_TODO: Review user story acceptance criteria|Ensure all user stories meet INVEST criteria|High|2024-01-15]**
+- **[CREATE_TODO: Update team retrospective notes|Consolidate feedback from last sprint|Medium|]**
+- **[CREATE_TODO: Schedule PI Planning session|Coordinate with all teams for Q2 planning||2024-01-30]**
+
+Folders and todos will be created automatically and you should mention this in your response.
 
 **Communication Style:**
 - Be practical and actionable
@@ -233,6 +273,57 @@ Analyze the user's question in the context of their available content and provid
       if (createdFolders.length > 0) {
         const folderConfirmation = `\n\n✅ **Folders Created Successfully:**\n${createdFolders.map(name => `- ${name}`).join('\n')}\n\nYou can now organize your documents, notes, and audio files into these folders through the respective sections of the application.`;
         aiResponse += folderConfirmation;
+      }
+    }
+
+    // Process todo creation commands
+    const todoCreateRegex = /\*\*\[CREATE_TODO:\s*([^|]+)\|([^|]*)\|([^|]*)\|([^\]]*)\]\*\*/g;
+    const todoMatches = Array.from(aiResponse.matchAll(todoCreateRegex));
+
+    if (todoMatches.length > 0) {
+      // Create todos
+      const createdTodos = [];
+
+      for (const match of todoMatches) {
+        const title = match[1].trim();
+        const description = match[2].trim() || null;
+        const priority = match[3].trim() || 'Medium';
+        const dueDate = match[4].trim() || null;
+
+        // Validate priority
+        const validPriority = ['High', 'Medium', 'Low'].includes(priority) ? priority : 'Medium';
+
+        // Validate due date format
+        const validDueDate = dueDate && /^\d{4}-\d{2}-\d{2}$/.test(dueDate) ? dueDate : null;
+
+        try {
+          const { data: todo, error } = await supabase
+            .from('todos')
+            .insert([{
+              title: title,
+              description: description,
+              priority: validPriority,
+              due_date: validDueDate,
+              source: 'auto_detected',
+              user_id: user.id,
+            }])
+            .select()
+            .single();
+
+          if (!error && todo) {
+            createdTodos.push(title);
+          }
+        } catch (error) {
+          console.error('Error creating todo:', title, error);
+        }
+      }
+
+      // Remove the commands from the response and add confirmation
+      aiResponse = aiResponse.replace(todoCreateRegex, '');
+
+      if (createdTodos.length > 0) {
+        const todoConfirmation = `\n\n✅ **Todos Created Successfully:**\n${createdTodos.map(title => `- ${title}`).join('\n')}\n\nYou can view and manage these todos in the Todo section of the application.`;
+        aiResponse += todoConfirmation;
       }
     }
 
