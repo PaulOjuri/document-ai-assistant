@@ -105,36 +105,38 @@ const FONT_SIZES = [
   { name: 'Extra Large', value: '20px' },
 ];
 
+const defaultSettings: SettingsState = {
+  theme: {
+    primaryColor: '#22c55e',
+    mode: 'light',
+    accentColor: '#16a34a',
+  },
+  typography: {
+    fontFamily: 'Inter, sans-serif',
+    fontSize: '16px',
+    fontWeight: '400',
+  },
+  layout: {
+    density: 'comfortable',
+    sidebarPosition: 'left',
+    borderRadius: '8px',
+    animations: true,
+  },
+  accessibility: {
+    highContrast: false,
+    reducedMotion: false,
+    focusRings: true,
+  },
+  notifications: {
+    todoDeadlines: true,
+    emailNotifications: false,
+    pushNotifications: true,
+    deadlineAdvanceHours: 24,
+  },
+};
+
 export function SettingsClientPage() {
-  const [settings, setSettings] = useState<SettingsState>({
-    theme: {
-      primaryColor: '#22c55e',
-      mode: 'light',
-      accentColor: '#16a34a',
-    },
-    typography: {
-      fontFamily: 'Inter, sans-serif',
-      fontSize: '16px',
-      fontWeight: '400',
-    },
-    layout: {
-      density: 'comfortable',
-      sidebarPosition: 'left',
-      borderRadius: '8px',
-      animations: true,
-    },
-    accessibility: {
-      highContrast: false,
-      reducedMotion: false,
-      focusRings: true,
-    },
-    notifications: {
-      todoDeadlines: true,
-      emailNotifications: false,
-      pushNotifications: true,
-      deadlineAdvanceHours: 24,
-    },
-  });
+  const [settings, setSettings] = useState<SettingsState>(defaultSettings);
 
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
@@ -148,84 +150,110 @@ export function SettingsClientPage() {
     if (savedSettings) {
       try {
         const parsed = JSON.parse(savedSettings);
-        setSettings(parsed);
-        applySettings(parsed);
+        // Merge with defaults to ensure all properties exist
+        const mergedSettings = {
+          theme: { ...defaultSettings.theme, ...parsed.theme },
+          typography: { ...defaultSettings.typography, ...parsed.typography },
+          layout: { ...defaultSettings.layout, ...parsed.layout },
+          accessibility: { ...defaultSettings.accessibility, ...parsed.accessibility },
+          notifications: { ...defaultSettings.notifications, ...parsed.notifications },
+        };
+        setSettings(mergedSettings);
+        applySettings(mergedSettings);
       } catch (error) {
         console.error('Error loading settings:', error);
+        // Fall back to defaults if parsing fails
+        setSettings(defaultSettings);
+        applySettings(defaultSettings);
       }
+    } else {
+      // Apply defaults if no saved settings
+      applySettings(defaultSettings);
     }
   };
 
   const applySettings = (settingsToApply: SettingsState) => {
-    const root = document.documentElement;
+    try {
+      const root = document.documentElement;
 
-    // Apply theme colors
-    root.style.setProperty('--primary-green', settingsToApply.theme.primaryColor);
-    root.style.setProperty('--primary-green-dark', settingsToApply.theme.accentColor);
-
-    // Apply typography
-    root.style.setProperty('--font-family', settingsToApply.typography.fontFamily);
-    root.style.setProperty('--font-size', settingsToApply.typography.fontSize);
-    root.style.setProperty('--font-weight', settingsToApply.typography.fontWeight);
-
-    // Apply font styles to body
-    document.body.style.fontFamily = settingsToApply.typography.fontFamily;
-    document.body.style.fontSize = settingsToApply.typography.fontSize;
-    document.body.style.fontWeight = settingsToApply.typography.fontWeight;
-
-    // Apply layout settings
-    root.style.setProperty('--border-radius', settingsToApply.layout.borderRadius);
-
-    // Apply density
-    const densityMap = {
-      compact: { spacing: '0.5rem', padding: '0.75rem' },
-      comfortable: { spacing: '1rem', padding: '1rem' },
-      spacious: { spacing: '1.5rem', padding: '1.5rem' }
-    };
-    const density = densityMap[settingsToApply.layout.density];
-    root.style.setProperty('--spacing', density.spacing);
-    root.style.setProperty('--padding', density.padding);
-
-    // Apply animations
-    if (!settingsToApply.layout.animations || settingsToApply.accessibility.reducedMotion) {
-      root.style.setProperty('--animation-duration', '0s');
-      root.style.setProperty('--transition-duration', '0s');
-    } else {
-      root.style.setProperty('--animation-duration', '0.2s');
-      root.style.setProperty('--transition-duration', '0.15s');
-    }
-
-    // Apply accessibility settings
-    if (settingsToApply.accessibility.highContrast) {
-      root.classList.add('high-contrast');
-    } else {
-      root.classList.remove('high-contrast');
-    }
-
-    if (settingsToApply.accessibility.reducedMotion) {
-      root.classList.add('reduced-motion');
-    } else {
-      root.classList.remove('reduced-motion');
-    }
-
-    if (!settingsToApply.accessibility.focusRings) {
-      root.classList.add('no-focus-rings');
-    } else {
-      root.classList.remove('no-focus-rings');
-    }
-
-    // Apply theme mode
-    if (settingsToApply.theme.mode === 'dark') {
-      root.classList.add('dark');
-    } else if (settingsToApply.theme.mode === 'light') {
-      root.classList.remove('dark');
-    } else {
-      // Auto mode - detect system preference
-      if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-        root.classList.add('dark');
-      } else {
-        root.classList.remove('dark');
+      // Apply theme colors
+      if (settingsToApply.theme?.primaryColor) {
+        root.style.setProperty('--primary-green', settingsToApply.theme.primaryColor);
       }
+      if (settingsToApply.theme?.accentColor) {
+        root.style.setProperty('--primary-green-dark', settingsToApply.theme.accentColor);
+      }
+
+      // Apply typography
+      if (settingsToApply.typography?.fontFamily) {
+        root.style.setProperty('--font-family', settingsToApply.typography.fontFamily);
+        document.body.style.fontFamily = settingsToApply.typography.fontFamily;
+      }
+      if (settingsToApply.typography?.fontSize) {
+        root.style.setProperty('--font-size', settingsToApply.typography.fontSize);
+        document.body.style.fontSize = settingsToApply.typography.fontSize;
+      }
+      if (settingsToApply.typography?.fontWeight) {
+        root.style.setProperty('--font-weight', settingsToApply.typography.fontWeight);
+        document.body.style.fontWeight = settingsToApply.typography.fontWeight;
+      }
+
+      // Apply layout settings
+      if (settingsToApply.layout?.borderRadius) {
+        root.style.setProperty('--border-radius', settingsToApply.layout.borderRadius);
+      }
+
+      // Apply density
+      if (settingsToApply.layout?.density) {
+        const densityMap = {
+          compact: { spacing: '0.5rem', padding: '0.75rem' },
+          comfortable: { spacing: '1rem', padding: '1rem' },
+          spacious: { spacing: '1.5rem', padding: '1.5rem' }
+        };
+        const density = densityMap[settingsToApply.layout.density];
+        if (density) {
+          root.style.setProperty('--spacing', density.spacing);
+          root.style.setProperty('--padding', density.padding);
+        }
+      }
+      // Apply animations
+      if (settingsToApply.layout?.animations !== undefined && settingsToApply.accessibility?.reducedMotion !== undefined) {
+        if (!settingsToApply.layout.animations || settingsToApply.accessibility.reducedMotion) {
+          root.style.setProperty('--animation-duration', '0s');
+          root.style.setProperty('--transition-duration', '0s');
+        } else {
+          root.style.setProperty('--animation-duration', '0.2s');
+          root.style.setProperty('--transition-duration', '0.15s');
+        }
+      }
+
+      // Apply accessibility settings
+      if (settingsToApply.accessibility?.highContrast !== undefined) {
+        if (settingsToApply.accessibility.highContrast) {
+          root.classList.add('high-contrast');
+        } else {
+          root.classList.remove('high-contrast');
+        }
+      }
+      // Apply reduced motion
+      if (settingsToApply.accessibility?.reducedMotion !== undefined) {
+        if (settingsToApply.accessibility.reducedMotion) {
+          root.classList.add('reduced-motion');
+        } else {
+          root.classList.remove('reduced-motion');
+        }
+      }
+
+      // Apply focus rings
+      if (settingsToApply.accessibility?.focusRings !== undefined) {
+        if (!settingsToApply.accessibility.focusRings) {
+          root.classList.add('no-focus-rings');
+        } else {
+          root.classList.remove('no-focus-rings');
+        }
+      }
+    } catch (error) {
+      console.error('Error applying settings:', error);
     }
   };
 

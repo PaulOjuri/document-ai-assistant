@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import OpenAI from 'openai';
+import Anthropic from '@anthropic-ai/sdk';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
 export async function POST(request: NextRequest) {
@@ -26,9 +26,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Content is required' }, { status: 400 });
     }
 
-    // Use OpenAI to extract todos from the content
-    const prompt = `
-Analyze the following text and extract actionable todo items. Focus on:
+    // Use Claude to extract todos from the content
+    const prompt = `Analyze the following text and extract actionable todo items. Focus on:
 - Action items mentioned explicitly
 - Follow-up tasks
 - Deadlines and commitments
@@ -52,33 +51,29 @@ Return the result as a JSON array of objects with this structure:
 Text to analyze:
 ${content}
 
-Important: Only return valid, actionable todos. Skip general statements or completed actions. Return an empty array if no todos are found.
-`;
+Important: Only return valid, actionable todos. Skip general statements or completed actions. Return an empty array if no todos are found.`;
 
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4',
+    const response = await anthropic.messages.create({
+      model: 'claude-3-sonnet-20241022',
+      max_tokens: 1000,
+      temperature: 0.3,
+      system: 'You are an expert at extracting actionable todo items from meeting summaries, documents, and notes. Always return valid JSON.',
       messages: [
-        {
-          role: 'system',
-          content: 'You are an expert at extracting actionable todo items from meeting summaries, documents, and notes. Always return valid JSON.',
-        },
         {
           role: 'user',
           content: prompt,
         },
       ],
-      temperature: 0.3,
-      max_tokens: 1000,
     });
 
     let detectedTodos = [];
     try {
-      const content = response.choices[0]?.message?.content;
+      const content = response.content[0]?.type === 'text' ? response.content[0].text : '';
       if (content) {
         detectedTodos = JSON.parse(content);
       }
     } catch (parseError) {
-      console.error('Error parsing OpenAI response:', parseError);
+      console.error('Error parsing Claude response:', parseError);
       return NextResponse.json({ error: 'Failed to parse AI response' }, { status: 500 });
     }
 
