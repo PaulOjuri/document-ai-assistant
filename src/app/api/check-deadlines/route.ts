@@ -16,16 +16,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Get user settings for notification preferences
-    let deadlineAdvanceHours = 24; // Default
-    try {
-      const settings = localStorage.getItem('app-settings');
-      if (settings) {
-        const parsed = JSON.parse(settings);
-        deadlineAdvanceHours = parsed.notifications?.deadlineAdvanceHours || 24;
-      }
-    } catch (e) {
-      // Use default if settings parsing fails
-    }
+    // Note: User settings are client-side only, using default values for server-side processing
+    let deadlineAdvanceHours = 24; // Default: 24 hours before deadline
 
     // Find todos with approaching deadlines that haven't been notified
     const { data: todos, error: todosError } = await supabase
