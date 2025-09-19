@@ -1,10 +1,10 @@
 'use client';
 
 export function EnvDebug() {
-  // Only show in development
-  if (process.env.NODE_ENV === 'production') {
-    return null;
-  }
+  // Show in production temporarily for debugging
+  // if (process.env.NODE_ENV === 'production') {
+  //   return null;
+  // }
 
   return (
     <div className="fixed top-4 right-4 bg-red-100 border border-red-400 p-4 rounded text-xs z-50 max-w-md">
