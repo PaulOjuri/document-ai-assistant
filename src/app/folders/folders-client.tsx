@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Folder, FolderPlus, Plus, Edit, Trash2, ChevronRight, ChevronDown, MessageSquare, FileText, Mic, Settings, ArrowLeft } from 'lucide-react';
+import { Folder, FolderPlus, Plus, Edit, Trash2, ChevronRight, ChevronDown, MessageSquare, FileText, CheckSquare, Settings, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,7 +20,7 @@ interface FolderWithChildren extends FolderRow {
   children: FolderWithChildren[];
   document_count?: number;
   note_count?: number;
-  audio_count?: number;
+  todo_count?: number;
 }
 
 interface PresetFolder {
@@ -63,7 +63,7 @@ export function FoldersClient() {
       setLoading(true);
 
       // Load folders and their stats
-      const [foldersResponse, documentsResponse, notesResponse, audiosResponse] = await Promise.all([
+      const [foldersResponse, documentsResponse, notesResponse, todosResponse] = await Promise.all([
         supabase
           .from('folders')
           .select('*')
@@ -78,7 +78,7 @@ export function FoldersClient() {
           .select('folder_id')
           .eq('user_id', user.id),
         supabase
-          .from('audios')
+          .from('todos')
           .select('folder_id')
           .eq('user_id', user.id)
       ]);
@@ -88,14 +88,14 @@ export function FoldersClient() {
       const folders = foldersResponse.data || [];
       const documents = documentsResponse.data || [];
       const notes = notesResponse.data || [];
-      const audios = audiosResponse.data || [];
+      const todos = todosResponse.data || [];
 
       // Calculate counts for each folder
       const folderStats = folders.reduce((acc, folder) => {
         acc[folder.id] = {
           document_count: documents.filter(d => d.folder_id === folder.id).length,
           note_count: notes.filter(n => n.folder_id === folder.id).length,
-          audio_count: audios.filter(a => a.folder_id === folder.id).length,
+          todo_count: todos.filter(t => t.folder_id === folder.id).length,
         };
         return acc;
       }, {} as Record<string, { document_count: number; note_count: number; audio_count: number }>);
@@ -254,7 +254,7 @@ export function FoldersClient() {
   const renderFolder = (folder: FolderWithChildren, level: number = 0) => {
     const isExpanded = expandedFolders.has(folder.id);
     const hasChildren = folder.children.length > 0;
-    const totalItems = (folder.document_count || 0) + (folder.note_count || 0) + (folder.audio_count || 0);
+    const totalItems = (folder.document_count || 0) + (folder.note_count || 0) + (folder.todo_count || 0);
 
     return (
       <div key={folder.id} className="w-full">
@@ -311,10 +311,10 @@ export function FoldersClient() {
                       <span>{folder.note_count}</span>
                     </div>
                   )}
-                  {(folder.audio_count || 0) > 0 && (
+                  {(folder.todo_count || 0) > 0 && (
                     <div className="flex items-center space-x-1">
-                      <Mic className="w-3 h-3" />
-                      <span>{folder.audio_count}</span>
+                      <CheckSquare className="w-3 h-3" />
+                      <span>{folder.todo_count}</span>
                     </div>
                   )}
                 </div>
