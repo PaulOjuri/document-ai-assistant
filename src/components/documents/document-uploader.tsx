@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { Upload, FileText, X, AlertCircle, CheckCircle } from 'lucide-react';
+import { Upload, FileText, X, AlertCircle, CheckCircle, Folder, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { createSupabaseClient } from '@/lib/supabase/client';
 import { useAuth } from '@/components/auth/auth-provider';
 import { getFileTypeIcon, formatBytes } from '@/lib/utils';
@@ -19,6 +20,12 @@ interface UploadFile {
   url?: string;
 }
 
+interface Folder {
+  id: string;
+  name: string;
+  user_id: string;
+}
+
 interface DocumentUploaderProps {
   folderId?: string;
   onUploadComplete?: (documents: any[]) => void;
@@ -28,8 +35,61 @@ interface DocumentUploaderProps {
 export function DocumentUploader({ folderId, onUploadComplete, onClose }: DocumentUploaderProps) {
   const [files, setFiles] = useState<UploadFile[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [selectedFolderId, setSelectedFolderId] = useState<string>(folderId || 'no-folder');
+  const [folders, setFolders] = useState<Folder[]>([]);
+  const [showCreateFolder, setShowCreateFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
   const { user } = useAuth();
   const supabase = createSupabaseClient();
+
+  // Load folders on component mount
+  useEffect(() => {
+    if (user) {
+      loadFolders();
+    }
+  }, [user]);
+
+  const loadFolders = async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('folders')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('name');
+
+      if (!error && data) {
+        setFolders(data);
+      }
+    } catch (error) {
+      console.error('Error loading folders:', error);
+    }
+  };
+
+  const createFolder = async () => {
+    if (!user || !newFolderName.trim()) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('folders')
+        .insert([{
+          name: newFolderName.trim(),
+          user_id: user.id,
+        }])
+        .select()
+        .single();
+
+      if (!error && data) {
+        setFolders(prev => [...prev, data]);
+        setSelectedFolderId(data.id);
+        setNewFolderName('');
+        setShowCreateFolder(false);
+      }
+    } catch (error) {
+      console.error('Error creating folder:', error);
+    }
+  };
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const newFiles: UploadFile[] = acceptedFiles.map(file => ({
@@ -130,7 +190,7 @@ export function DocumentUploader({ folderId, onUploadComplete, onClose }: Docume
             file_type: fileExt || 'unknown',
             file_size: uploadFile.file.size,
             tags: [],
-            folder_id: folderId || null,
+            folder_id: selectedFolderId && selectedFolderId !== 'no-folder' ? selectedFolderId : null,
             user_id: user.id,
           })
           .select()
@@ -169,6 +229,67 @@ export function DocumentUploader({ folderId, onUploadComplete, onClose }: Docume
 
   return (
     <div className="space-y-6">
+      {/* Folder Selection */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="space-y-4">
+            <h3 className="text-sm font-medium text-[var(--foreground)]">Select Folder</h3>
+            <div className="flex items-center space-x-2">
+              <Select value={selectedFolderId} onValueChange={setSelectedFolderId}>
+                <SelectTrigger className="flex-1">
+                  <SelectValue placeholder="Choose a folder (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="no-folder">No folder</SelectItem>
+                  {folders.map((folder) => (
+                    <SelectItem key={folder.id} value={folder.id}>
+                      <div className="flex items-center space-x-2">
+                        <Folder className="w-4 h-4" />
+                        <span>{folder.name}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowCreateFolder(true)}
+                className="px-3"
+              >
+                <Plus className="w-4 h-4" />
+              </Button>
+            </div>
+
+            {/* Create Folder Input */}
+            {showCreateFolder && (
+              <div className="flex items-center space-x-2">
+                <Input
+                  placeholder="Enter folder name..."
+                  value={newFolderName}
+                  onChange={(e) => setNewFolderName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && createFolder()}
+                  className="flex-1"
+                />
+                <Button size="sm" onClick={createFolder} disabled={!newFolderName.trim()}>
+                  Create
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setShowCreateFolder(false);
+                    setNewFolderName('');
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Drag & Drop Area */}
       <Card className={`border-2 border-dashed transition-colors ${
         isDragActive

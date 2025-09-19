@@ -229,8 +229,6 @@ export function AudioClientPage({ initialAudios }: AudioClientProps) {
             transcription: audioTranscript.trim() || null,
             meeting_type: selectedMeetingType || null,
             participants: participantsArray,
-            folder_id: selectedFolder === 'no-folder' ? null : selectedFolder || null,
-            custom_date: customDate || null,
             user_id: user.id,
           },
         ])
@@ -239,9 +237,13 @@ export function AudioClientPage({ initialAudios }: AudioClientProps) {
 
       if (error) {
         console.error('Error creating audio record:', error);
+        return;
       } else {
         // Add the new audio to the list
         setAudios([data, ...audios]);
+
+        // Success message
+        alert('Audio uploaded successfully!');
 
         // Reset form
         resetForm();

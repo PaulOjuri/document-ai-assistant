@@ -7,11 +7,18 @@ import { DocumentCard } from './document-card';
 import { DocumentListView } from './document-list-view';
 import type { Document } from '@/types';
 
+type FolderOption = {
+  id: string;
+  name: string;
+};
+
 interface DocumentGridProps {
   documents: Document[];
+  folders?: FolderOption[];
   onDocumentView?: (document: Document) => void;
   onDocumentDownload?: (document: Document) => void;
   onDocumentDelete?: (document: Document) => void;
+  onDocumentMoveToFolder?: (document: Document, folderId: string | null) => void;
 }
 
 const mockDocuments: Document[] = [
@@ -96,9 +103,11 @@ const mockDocuments: Document[] = [
 
 export function DocumentGrid({
   documents = mockDocuments,
+  folders = [],
   onDocumentView,
   onDocumentDownload,
-  onDocumentDelete
+  onDocumentDelete,
+  onDocumentMoveToFolder
 }: DocumentGridProps) {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [sortBy, setSortBy] = useState<'date' | 'name' | 'type'>('date');
@@ -172,9 +181,11 @@ export function DocumentGrid({
             <DocumentCard
               key={document.id}
               document={document}
+              folders={folders}
               onView={onDocumentView}
               onDownload={onDocumentDownload}
               onDelete={onDocumentDelete}
+              onMoveToFolder={onDocumentMoveToFolder}
             />
           ))}
         </div>

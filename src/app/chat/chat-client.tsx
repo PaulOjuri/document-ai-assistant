@@ -1,11 +1,11 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Send, Bot, User, Target, TrendingUp, Users, FileText, BookOpen, Lightbulb, Zap, FolderPlus } from 'lucide-react';
+import { Send, Bot, User, Upload, Save, Mic } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { MainLayout } from '@/components/layout/main-layout';
 import { useAuth } from '@/components/auth/auth-provider';
 import { ChatHistorySidebar } from '@/components/chat/chat-history-sidebar';
 import { useChatHistory } from '@/hooks/useChatHistory';
@@ -27,62 +27,13 @@ interface ChatClientProps {
   contentSummary: ContentSummary;
 }
 
-const quickSuggestions = [
-  {
-    icon: Target,
-    title: 'Analyze User Stories',
-    prompt: 'Analyze my user stories using INVEST criteria and provide recommendations',
-    description: 'Review story quality using INVEST criteria',
-    color: 'bg-blue-100 text-blue-700'
-  },
-  {
-    icon: TrendingUp,
-    title: 'WSJF Prioritization',
-    prompt: 'Help me prioritize my backlog using WSJF methodology',
-    description: 'Prioritize backlog with WSJF scoring',
-    color: 'bg-green-100 text-green-700'
-  },
-  {
-    icon: Users,
-    title: 'Meeting Analysis',
-    prompt: 'Analyze my recent meeting notes and audio recordings for action items and insights',
-    description: 'Extract insights from meetings',
-    color: 'bg-purple-100 text-purple-700'
-  },
-  {
-    icon: FileText,
-    title: 'Document Review',
-    prompt: 'Review my documents for SAFe compliance and best practices',
-    description: 'Analyze documents for SAFe practices',
-    color: 'bg-orange-100 text-orange-700'
-  },
-  {
-    icon: BookOpen,
-    title: 'PI Planning Guidance',
-    prompt: 'Guide me through PI Planning preparation and best practices',
-    description: 'PI Planning guidance and facilitation',
-    color: 'bg-indigo-100 text-indigo-700'
-  },
-  {
-    icon: Lightbulb,
-    title: 'Acceptance Criteria',
-    prompt: 'Help me create comprehensive acceptance criteria for my user stories',
-    description: 'Generate AC for stories',
-    color: 'bg-yellow-100 text-yellow-700'
-  },
-  {
-    icon: FolderPlus,
-    title: 'Create Folder',
-    prompt: 'Help me create a new folder to organize my documents and notes',
-    description: 'Create and organize folders',
-    color: 'bg-cyan-100 text-cyan-700'
-  }
-];
 
 export function ChatClientPage({ contentSummary }: ChatClientProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [meetingTranscript, setMeetingTranscript] = useState('');
+  const [isProcessingTranscript, setIsProcessingTranscript] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
   const { saveChat, currentChatId, archiveCurrentChatAndStartNew } = useChatHistory();
@@ -103,13 +54,19 @@ I'm a **Claude 3.5 Sonnet powered AI agent** specialized in SAFe and Agile pract
 • **Real-time analysis** of your content using INVEST criteria
 • **Smart backlog prioritization** with WSJF scoring
 • **PI Planning guidance** tailored to your situation
-• **Meeting insights** from your audio and notes
+• **Meeting transcript analysis** - Extract action items and key decisions
 • **SAFe artifact review** with specific recommendations
 • **Custom acceptance criteria** generation
 
-Choose a quick action below or ask me anything! I'll analyze your actual content to provide personalized SAFe guidance.
+**Meeting Transcript Analysis:** Use the section above to paste meeting transcripts and I'll automatically extract:
+- Action items with owners
+- Key decisions made
+- Next steps and deadlines
+- Meeting participants and roles
 
-💡 *Tip: Try "Analyze my documents" or "Help me prioritize my backlog"*`,
+Ask me anything! I'll analyze your actual content to provide personalized SAFe guidance.
+
+💡 *Tip: Try "Analyze my documents" or paste a meeting transcript above*`,
         timestamp: new Date()
       }
     ]);
@@ -122,6 +79,81 @@ Choose a quick action below or ask me anything! I'll analyze your actual content
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  const handleProcessTranscript = async () => {
+    if (!meetingTranscript.trim() || !user) return;
+
+    setIsProcessingTranscript(true);
+
+    const prompt = `Please analyze this meeting transcript and extract action items, key decisions, and next steps. Format the response as a structured summary with clear sections for Action Items, Key Decisions, Participants, and Next Steps. Here's the transcript:
+
+${meetingTranscript}`;
+
+    // Add the transcript processing as a chat message
+    const newMessage: ChatMessage = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: 'Process meeting transcript and extract action items',
+      timestamp: new Date()
+    };
+
+    const aiMessageId = (Date.now() + 1).toString();
+    const aiResponse: ChatMessage = {
+      id: aiMessageId,
+      role: 'assistant',
+      content: '',
+      timestamp: new Date()
+    };
+
+    setMessages(prev => [...prev, newMessage, aiResponse]);
+
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: prompt,
+          userId: user.id
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to process transcript');
+      }
+
+      const data = await response.json();
+
+      setMessages(prev => {
+        const updatedMessages = prev.map(msg =>
+          msg.id === aiMessageId
+            ? { ...msg, content: data.response }
+            : msg
+        );
+
+        // Auto-save chat after AI response
+        setTimeout(() => {
+          saveChat(updatedMessages, currentChatId);
+        }, 1000);
+
+        return updatedMessages;
+      });
+
+      // Clear the transcript after processing
+      setMeetingTranscript('');
+
+    } catch (error) {
+      console.error('Error processing transcript:', error);
+      setMessages(prev => prev.map(msg =>
+        msg.id === aiMessageId
+          ? { ...msg, content: 'Sorry, I encountered an error processing the meeting transcript. Please try again.' }
+          : msg
+      ));
+    } finally {
+      setIsProcessingTranscript(false);
+    }
+  };
 
   const handleSend = async (messageText?: string) => {
     const messageToSend = messageText || input.trim();
@@ -192,9 +224,6 @@ Choose a quick action below or ask me anything! I'll analyze your actual content
     }
   };
 
-  const handleQuickSuggestion = (prompt: string) => {
-    handleSend(prompt);
-  };
 
   const handleChatSelect = (chatId: string, chatMessages: ChatMessage[]) => {
     setMessages(chatMessages);
@@ -207,8 +236,26 @@ Choose a quick action below or ask me anything! I'll analyze your actual content
   };
 
   return (
-    <MainLayout>
-      <div className="flex h-screen overflow-hidden">
+    <div className="h-screen flex flex-col bg-[var(--background)]">
+      {/* Custom header for chat page */}
+      <div className="flex-shrink-0 h-16 border-b border-[var(--border)] bg-[var(--card)] px-6 flex items-center justify-between">
+        <div className="flex items-center space-x-4">
+          <div className="w-8 h-8 bg-[var(--primary-green)] rounded-lg flex items-center justify-center">
+            <span className="text-white font-bold text-sm">DA</span>
+          </div>
+          <span className="font-semibold text-[var(--foreground)]">Document AI Assistant</span>
+          <nav className="flex items-center space-x-6 ml-8">
+            <a href="/dashboard" className="text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)]">Dashboard</a>
+            <a href="/documents" className="text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)]">Documents</a>
+            <a href="/notes" className="text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)]">Notes</a>
+            <a href="/audio" className="text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)]">Audio</a>
+            <span className="px-3 py-1 bg-[var(--primary-green)] text-white text-sm rounded-full">SAFe Chat</span>
+          </nav>
+        </div>
+        <div className="text-sm text-[var(--muted-foreground)]">paulojuri105@gmail.com</div>
+      </div>
+
+      <div className="flex flex-1 overflow-hidden">
         <ChatHistorySidebar
           onChatSelect={handleChatSelect}
           onNewChat={handleNewChat}
@@ -223,7 +270,7 @@ Choose a quick action below or ask me anything! I'll analyze your actual content
               </div>
               <div>
                 <h1 className="text-xl font-bold text-[var(--foreground)]">SAFe AI Assistant</h1>
-                <p className="text-sm text-[var(--muted-foreground)]">GPT-4 powered SAFe expert</p>
+                <p className="text-sm text-[var(--muted-foreground)]">Claude 3 powered SAFe expert</p>
               </div>
             </div>
 
@@ -245,29 +292,59 @@ Choose a quick action below or ask me anything! I'll analyze your actual content
           </div>
         </div>
 
-        {/* Quick Actions Row */}
+        {/* Meeting Transcript Section */}
         <div className="flex-shrink-0 p-4 border-b border-[var(--border)] bg-[var(--background)]">
-          <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
-            {quickSuggestions.map((suggestion, index) => (
-              <Card
-                key={index}
-                className="cursor-pointer hover:bg-[var(--muted)] transition-colors"
-                onClick={() => handleQuickSuggestion(suggestion.prompt)}
-              >
-                <CardContent className="p-3">
-                  <div className="flex flex-col items-center text-center space-y-2">
-                    <div className={`w-8 h-8 ${suggestion.color} rounded-full flex items-center justify-center`}>
-                      <suggestion.icon className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <h3 className="font-medium text-xs">{suggestion.title}</h3>
-                      <p className="text-xs text-[var(--muted-foreground)] line-clamp-2">{suggestion.description}</p>
-                    </div>
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center space-x-2 text-sm">
+                <Mic className="w-4 h-4 text-[var(--primary-green)]" />
+                <span>Meeting Transcript Analysis</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                <Textarea
+                  placeholder="Paste your meeting transcript here. The AI will extract action items, key decisions, and next steps..."
+                  value={meetingTranscript}
+                  onChange={(e) => setMeetingTranscript(e.target.value)}
+                  rows={4}
+                  className="resize-none"
+                />
+                <div className="flex items-center justify-between">
+                  <div className="text-xs text-[var(--muted-foreground)]">
+                    {meetingTranscript.length} characters
                   </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                  <div className="flex space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setMeetingTranscript('')}
+                      disabled={!meetingTranscript.trim() || isProcessingTranscript}
+                    >
+                      Clear
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={handleProcessTranscript}
+                      disabled={!meetingTranscript.trim() || isProcessingTranscript}
+                    >
+                      {isProcessingTranscript ? (
+                        <>
+                          <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                          Processing...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-3 h-3 mr-2" />
+                          Extract Action Items
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Chat Messages */}
@@ -337,7 +414,7 @@ Choose a quick action below or ask me anything! I'll analyze your actual content
         </div>
 
         {/* Input Area */}
-        <div className="flex-shrink-0 p-4 border-t border-[var(--border)] bg-[var(--card)] m-0">
+        <div className="flex-shrink-0 p-4 border-t border-[var(--border)] bg-[var(--card)]">
           <div className="flex space-x-4">
             <Input
               value={input}
@@ -362,6 +439,6 @@ Choose a quick action below or ask me anything! I'll analyze your actual content
         </div>
         </div>
       </div>
-    </MainLayout>
+    </div>
   );
 }

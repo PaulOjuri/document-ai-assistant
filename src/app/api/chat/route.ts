@@ -40,53 +40,92 @@ For now, I can provide SAFe guidance based on your content using built-in knowle
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Fetch user's content for context
-    const [documentsResult, notesResult, audiosResult] = await Promise.all([
+    // Fetch user's content for context with folder information
+    const [documentsResult, notesResult, audiosResult, foldersResult] = await Promise.all([
       supabase
         .from('documents')
-        .select('title, content, file_type, artifact_type, priority, tags')
+        .select(`
+          title, content, file_type, artifact_type, priority, tags,
+          folder_id,
+          folders!inner(name, parent_id)
+        `)
         .eq('user_id', userId)
         .order('updated_at', { ascending: false })
-        .limit(10),
+        .limit(15),
       supabase
         .from('notes')
-        .select('title, content, meeting_type, participants')
+        .select(`
+          title, content, meeting_type, participants,
+          folder_id,
+          folders!inner(name, parent_id)
+        `)
         .eq('user_id', userId)
         .order('updated_at', { ascending: false })
-        .limit(10),
+        .limit(15),
       supabase
         .from('audios')
-        .select('title, transcription, meeting_type, participants')
+        .select(`
+          title, transcription, meeting_type, participants,
+          folder_id,
+          folders!inner(name, parent_id)
+        `)
         .eq('user_id', userId)
         .order('updated_at', { ascending: false })
-        .limit(10)
+        .limit(15),
+      supabase
+        .from('folders')
+        .select('id, name, parent_id')
+        .eq('user_id', userId)
+        .order('name')
     ]);
 
     const documents = documentsResult.data || [];
     const notes = notesResult.data || [];
     const audios = audiosResult.data || [];
+    const folders = foldersResult.data || [];
 
-    // Build context for the AI
+    // Build folder hierarchy for context
+    const folderMap = new Map(folders.map(f => [f.id, f]));
+    const getFolderPath = (folderId: string): string => {
+      const folder = folderMap.get(folderId);
+      if (!folder) return 'No folder';
+      if (folder.parent_id) {
+        const parentPath = getFolderPath(folder.parent_id);
+        return `${parentPath} > ${folder.name}`;
+      }
+      return folder.name;
+    };
+
+    // Build context for the AI with folder organization
     const contextData = {
+      folderStructure: folders.map(f => ({
+        name: f.name,
+        path: getFolderPath(f.id),
+        isFeatureFolder: f.name.includes('Context') || f.name.includes('Meeting') || f.name.includes('User Stories'),
+        isGeneralContext: f.name === 'General Context' || f.name.includes('Technology') || f.name.includes('Team')
+      })),
       documents: documents.map(doc => ({
         title: doc.title,
         file_type: doc.file_type,
         artifact_type: doc.artifact_type,
         priority: doc.priority,
         tags: doc.tags,
+        folder: doc.folder_id ? getFolderPath(doc.folder_id) : 'No folder',
         content: doc.content?.substring(0, 15000) // Increased limit for better analysis
       })),
       notes: notes.map(note => ({
         title: note.title,
         content: note.content?.substring(0, 10000),
         meeting_type: note.meeting_type,
-        participants: note.participants
+        participants: note.participants,
+        folder: note.folder_id ? getFolderPath(note.folder_id) : 'No folder'
       })),
       audios: audios.map(audio => ({
         title: audio.title,
         transcription: audio.transcription?.substring(0, 10000),
         meeting_type: audio.meeting_type,
-        participants: audio.participants
+        participants: audio.participants,
+        folder: audio.folder_id ? getFolderPath(audio.folder_id) : 'No folder'
       }))
     };
 

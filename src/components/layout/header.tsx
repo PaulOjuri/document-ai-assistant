@@ -22,6 +22,7 @@ export function Header() {
     { href: '/documents', label: 'Documents' },
     { href: '/notes', label: 'Notes' },
     { href: '/audio', label: 'Audio' },
+    { href: '/folders', label: 'Folders' },
     { href: '/chat', label: 'SAFe Chat' },
   ];
 

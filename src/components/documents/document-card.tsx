@@ -1,20 +1,38 @@
 'use client';
 
+import { useState } from 'react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { FileText, Download, Eye, MoreHorizontal, Tag, Calendar } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { FileText, Download, Eye, MoreHorizontal, Tag, Calendar, Folder, Move } from 'lucide-react';
 import { getFileTypeIcon, getSafeArtifactColor, getPriorityColor, formatBytes } from '@/lib/utils';
 import type { Document } from '@/types';
 
+type FolderOption = {
+  id: string;
+  name: string;
+};
+
 interface DocumentCardProps {
   document: Document;
+  folders?: FolderOption[];
   onView?: (document: Document) => void;
   onDownload?: (document: Document) => void;
   onDelete?: (document: Document) => void;
+  onMoveToFolder?: (document: Document, folderId: string | null) => void;
 }
 
-export function DocumentCard({ document, onView, onDownload, onDelete }: DocumentCardProps) {
+export function DocumentCard({ document, folders = [], onView, onDownload, onDelete, onMoveToFolder }: DocumentCardProps) {
+  const [showFolderDialog, setShowFolderDialog] = useState(false);
+  const [selectedFolderId, setSelectedFolderId] = useState<string>(document.folder_id || 'no-folder');
   const fileIcon = getFileTypeIcon(document.fileType);
+
+  const handleMoveToFolder = () => {
+    const folderId = selectedFolderId === 'no-folder' ? null : selectedFolderId;
+    onMoveToFolder?.(document, folderId);
+    setShowFolderDialog(false);
+  };
 
   return (
     <Card className="group hover:shadow-md transition-all duration-200 hover:border-[var(--primary-green)] w-full overflow-hidden">
@@ -94,11 +112,91 @@ export function DocumentCard({ document, onView, onDownload, onDelete }: Documen
             </div>
 
             <div className="flex items-center space-x-1">
+              {onMoveToFolder && (
+                <Dialog open={showFolderDialog} onOpenChange={setShowFolderDialog}>
+                  <DialogTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="w-8 h-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="Move to folder"
+                    >
+                      <Move className="w-4 h-4" />
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Move Document to Folder</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="text-sm font-medium">Document: {document.title}</label>
+                      </div>
+                      {folders.length > 0 ? (
+                        <>
+                          <div>
+                            <label className="text-sm font-medium">Select Folder:</label>
+                            <Select value={selectedFolderId} onValueChange={setSelectedFolderId}>
+                              <SelectTrigger className="mt-2">
+                                <SelectValue placeholder="Choose a folder..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="no-folder">
+                                  <div className="flex items-center space-x-2">
+                                    <span>No Folder</span>
+                                  </div>
+                                </SelectItem>
+                                {folders.map((folder) => (
+                                  <SelectItem key={folder.id} value={folder.id}>
+                                    <div className="flex items-center space-x-2">
+                                      <Folder className="w-4 h-4" />
+                                      <span>{folder.name}</span>
+                                    </div>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="flex justify-end space-x-2">
+                            <Button variant="outline" onClick={() => setShowFolderDialog(false)}>
+                              Cancel
+                            </Button>
+                            <Button onClick={handleMoveToFolder}>
+                              Move Document
+                            </Button>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="text-center py-4">
+                            <Folder className="w-12 h-12 mx-auto mb-3 text-[var(--muted-foreground)]" />
+                            <p className="text-sm text-[var(--muted-foreground)] mb-2">
+                              No folders available
+                            </p>
+                            <p className="text-xs text-[var(--muted-foreground)]">
+                              Create folders first to organize your documents
+                            </p>
+                          </div>
+                          <div className="flex justify-center space-x-2">
+                            <Button variant="outline" onClick={() => setShowFolderDialog(false)}>
+                              Close
+                            </Button>
+                            <Button asChild>
+                              <a href="/folders">Create Folders</a>
+                            </Button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              )}
               <Button
                 variant="ghost"
                 size="icon"
                 className="w-8 h-8 opacity-0 group-hover:opacity-100 transition-opacity"
                 onClick={() => onView?.(document)}
+                title="View document"
               >
                 <Eye className="w-4 h-4" />
               </Button>
@@ -107,6 +205,7 @@ export function DocumentCard({ document, onView, onDownload, onDelete }: Documen
                 size="icon"
                 className="w-8 h-8 opacity-0 group-hover:opacity-100 transition-opacity"
                 onClick={() => onDownload?.(document)}
+                title="Download document"
               >
                 <Download className="w-4 h-4" />
               </Button>

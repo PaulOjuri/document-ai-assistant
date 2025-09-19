@@ -1,14 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useAuth } from '@/components/auth/auth-provider';
+import { createSupabaseClient } from '@/lib/supabase/client';
 import {
   Folder,
   FolderPlus,
   Upload,
   FileText,
   Mic,
-  Filter,
   ChevronRight,
   ChevronDown,
   Plus,
@@ -22,41 +23,8 @@ interface FolderNode {
   name: string;
   children?: FolderNode[];
   documentCount?: number;
-  safeArtifact?: string;
+  parent_id?: string | null;
 }
-
-const mockFolders: FolderNode[] = [
-  {
-    id: '1',
-    name: 'PI Planning Q4 2024',
-    safeArtifact: 'Epic',
-    documentCount: 12,
-    children: [
-      { id: '2', name: 'User Stories', documentCount: 8, safeArtifact: 'User Story' },
-      { id: '3', name: 'Acceptance Criteria', documentCount: 4 }
-    ]
-  },
-  {
-    id: '4',
-    name: 'Feature Backlog',
-    safeArtifact: 'Feature',
-    documentCount: 25,
-    children: [
-      { id: '5', name: 'Mobile App Features', documentCount: 15 },
-      { id: '6', name: 'Web Platform Features', documentCount: 10 }
-    ]
-  },
-  {
-    id: '7',
-    name: 'Meeting Notes',
-    documentCount: 18,
-    children: [
-      { id: '8', name: 'Sprint Planning', documentCount: 6 },
-      { id: '9', name: 'Retrospectives', documentCount: 4 },
-      { id: '10', name: 'PO Sync', documentCount: 8 }
-    ]
-  }
-];
 
 function FolderTree({ folders, level = 0 }: { folders: FolderNode[]; level?: number }) {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(['1', '4', '7']));
@@ -92,14 +60,9 @@ function FolderTree({ folders, level = 0 }: { folders: FolderNode[]; level?: num
             )}
             <Folder className="w-4 h-4 text-[var(--primary-green)]" />
             <span className="text-sm flex-1">{folder.name}</span>
-            {folder.documentCount && (
+            {folder.documentCount && folder.documentCount > 0 && (
               <span className="text-xs text-[var(--muted-foreground)] bg-[var(--muted)] px-2 py-1 rounded-full">
                 {folder.documentCount}
-              </span>
-            )}
-            {folder.safeArtifact && (
-              <span className="text-xs bg-[var(--primary-green)] text-white px-2 py-1 rounded">
-                {folder.safeArtifact}
               </span>
             )}
           </div>
@@ -113,6 +76,93 @@ function FolderTree({ folders, level = 0 }: { folders: FolderNode[]; level?: num
 }
 
 export function Sidebar() {
+  const { user } = useAuth();
+  const [folders, setFolders] = useState<FolderNode[]>([]);
+  const [loading, setLoading] = useState(true);
+  const supabase = createSupabaseClient();
+
+  useEffect(() => {
+    if (user) {
+      loadFolders();
+    }
+  }, [user]);
+
+  const loadFolders = async () => {
+    if (!user) return;
+
+    try {
+      setLoading(true);
+
+      // Load folders and their content counts
+      const [foldersResponse, documentsResponse, notesResponse, audiosResponse] = await Promise.all([
+        supabase
+          .from('folders')
+          .select('id, name, parent_id')
+          .eq('user_id', user.id)
+          .order('name'),
+        supabase
+          .from('documents')
+          .select('folder_id')
+          .eq('user_id', user.id),
+        supabase
+          .from('notes')
+          .select('folder_id')
+          .eq('user_id', user.id),
+        supabase
+          .from('audios')
+          .select('folder_id')
+          .eq('user_id', user.id)
+      ]);
+
+      if (foldersResponse.error) throw foldersResponse.error;
+
+      const foldersData = foldersResponse.data || [];
+      const documents = documentsResponse.data || [];
+      const notes = notesResponse.data || [];
+      const audios = audiosResponse.data || [];
+
+      // Calculate total content count for each folder
+      const folderCounts = foldersData.reduce((acc, folder) => {
+        const docCount = documents.filter(d => d.folder_id === folder.id).length;
+        const noteCount = notes.filter(n => n.folder_id === folder.id).length;
+        const audioCount = audios.filter(a => a.folder_id === folder.id).length;
+
+        acc[folder.id] = docCount + noteCount + audioCount;
+        return acc;
+      }, {} as Record<string, number>);
+
+      // Build folder tree
+      const foldersWithCounts: FolderNode[] = foldersData.map(folder => ({
+        ...folder,
+        children: [],
+        documentCount: folderCounts[folder.id] || 0
+      }));
+
+      const folderMap = new Map<string, FolderNode>();
+      foldersWithCounts.forEach(folder => folderMap.set(folder.id, folder));
+
+      const rootFolders: FolderNode[] = [];
+
+      foldersWithCounts.forEach(folder => {
+        if (folder.parent_id) {
+          const parent = folderMap.get(folder.parent_id);
+          if (parent) {
+            if (!parent.children) parent.children = [];
+            parent.children.push(folder);
+          }
+        } else {
+          rootFolders.push(folder);
+        }
+      });
+
+      setFolders(rootFolders);
+    } catch (error) {
+      console.error('Error loading folders:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <aside className="w-80 border-r border-[var(--border)] bg-[var(--card)] flex flex-col h-full">
       <div className="p-4 border-b border-[var(--border)]">
@@ -142,56 +192,43 @@ export function Sidebar() {
               SAFe Chat
             </Button>
           </Link>
-          <Button className="w-full justify-start" variant="outline">
-            <FolderPlus className="w-4 h-4 mr-2" />
-            New Folder
-          </Button>
+          <Link href="/folders">
+            <Button className="w-full justify-start" variant="outline">
+              <FolderPlus className="w-4 h-4 mr-2" />
+              New Folder
+            </Button>
+          </Link>
         </div>
       </div>
 
       <div className="p-4 border-b border-[var(--border)]">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-medium">Folders</h3>
-          <Button variant="ghost" size="icon" className="w-6 h-6">
-            <Plus className="w-4 h-4" />
-          </Button>
+          <Link href="/folders">
+            <Button variant="ghost" size="icon" className="w-6 h-6">
+              <Plus className="w-4 h-4" />
+            </Button>
+          </Link>
         </div>
         <div className="max-h-96 overflow-y-auto scrollbar-hide">
-          <FolderTree folders={mockFolders} />
+          {loading ? (
+            <div className="flex items-center justify-center py-4">
+              <div className="w-4 h-4 border-2 border-[var(--primary-green)] border-t-transparent rounded-full animate-spin"></div>
+            </div>
+          ) : folders.length === 0 ? (
+            <div className="text-center py-4 text-[var(--muted-foreground)]">
+              <Folder className="w-8 h-8 mx-auto mb-2 opacity-50" />
+              <p className="text-xs">No folders yet</p>
+              <Link href="/folders" className="text-xs text-[var(--primary-green)] hover:underline">
+                Create your first folder
+              </Link>
+            </div>
+          ) : (
+            <FolderTree folders={folders} />
+          )}
         </div>
       </div>
 
-      <div className="p-4 flex-1 flex flex-col">
-        <div className="flex items-center space-x-2 mb-3">
-          <Filter className="w-4 h-4" />
-          <h3 className="font-medium">Filters</h3>
-        </div>
-        <div className="space-y-3 flex-1">
-          <Card className="p-3">
-            <h4 className="text-sm font-medium mb-2">SAFe Artifacts</h4>
-            <div className="space-y-1">
-              {['Epic', 'Feature', 'User Story', 'Capability'].map((artifact) => (
-                <label key={artifact} className="flex items-center space-x-2 text-sm">
-                  <input type="checkbox" className="rounded" />
-                  <span>{artifact}</span>
-                </label>
-              ))}
-            </div>
-          </Card>
-
-          <Card className="p-3">
-            <h4 className="text-sm font-medium mb-2">File Types</h4>
-            <div className="space-y-1">
-              {['PDF', 'DOCX', 'Notes', 'Audio'].map((type) => (
-                <label key={type} className="flex items-center space-x-2 text-sm">
-                  <input type="checkbox" className="rounded" />
-                  <span>{type}</span>
-                </label>
-              ))}
-            </div>
-          </Card>
-        </div>
-      </div>
     </aside>
   );
 }

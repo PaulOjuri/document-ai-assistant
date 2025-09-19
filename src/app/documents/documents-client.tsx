@@ -1,18 +1,21 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Upload } from 'lucide-react';
+import { Plus, Upload, Folder, Filter } from 'lucide-react';
 import { MainLayout } from '@/components/layout/main-layout';
 import { DocumentGrid } from '@/components/documents/document-grid';
 import { DocumentViewer } from '@/components/documents/document-viewer';
 import { DocumentUploader } from '@/components/documents/document-uploader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { createSupabaseClient } from '@/lib/supabase/client';
 import { documentService } from '@/lib/supabase/documents';
 import { useAuth } from '@/components/auth/auth-provider';
 import type { Database } from '@/lib/supabase/database.types';
 
 type Document = Database['public']['Tables']['documents']['Row'];
+type Folder = Database['public']['Tables']['folders']['Row'];
 
 interface DocumentsPageClientProps {
   initialDocuments: Document[];
@@ -23,7 +26,51 @@ export function DocumentsPageClient({ initialDocuments }: DocumentsPageClientPro
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
   const [showUploader, setShowUploader] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [folders, setFolders] = useState<Folder[]>([]);
+  const [selectedFolderId, setSelectedFolderId] = useState<string>('all');
+  const [filteredDocuments, setFilteredDocuments] = useState<Document[]>(initialDocuments);
   const { user } = useAuth();
+  const supabase = createSupabaseClient();
+
+  // Load folders on mount
+  useEffect(() => {
+    if (user) {
+      loadFolders();
+    }
+  }, [user]);
+
+  // Filter documents when folder or documents change
+  useEffect(() => {
+    filterDocuments();
+  }, [documents, selectedFolderId]);
+
+  const loadFolders = async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('folders')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('name');
+
+      if (!error && data) {
+        setFolders(data);
+      }
+    } catch (error) {
+      console.error('Error loading folders:', error);
+    }
+  };
+
+  const filterDocuments = () => {
+    if (selectedFolderId === 'all') {
+      setFilteredDocuments(documents);
+    } else if (selectedFolderId === 'none') {
+      setFilteredDocuments(documents.filter(doc => !doc.folder_id));
+    } else {
+      setFilteredDocuments(documents.filter(doc => doc.folder_id === selectedFolderId));
+    }
+  };
 
   const refreshDocuments = async () => {
     if (!user) return;
@@ -64,8 +111,30 @@ export function DocumentsPageClient({ initialDocuments }: DocumentsPageClientPro
     ));
   };
 
+  const handleDocumentMoveToFolder = async (document: Document, folderId: string | null) => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from('documents')
+        .update({ folder_id: folderId })
+        .eq('id', document.id)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+
+      // Update the local state
+      setDocuments(prev => prev.map(d =>
+        d.id === document.id ? { ...d, folder_id: folderId } : d
+      ));
+    } catch (error) {
+      console.error('Failed to move document to folder:', error);
+    }
+  };
+
   const handleUploadComplete = (uploadedDocuments: Document[]) => {
     setDocuments(prev => [...uploadedDocuments, ...prev]);
+    loadFolders(); // Refresh folders in case new ones were created
     setShowUploader(false);
   };
 
@@ -88,14 +157,68 @@ export function DocumentsPageClient({ initialDocuments }: DocumentsPageClientPro
               </Button>
             </div>
 
+            {/* Folder Filter */}
+            {folders.length > 0 && (
+              <div className="mb-6">
+                <div className="flex items-center space-x-4">
+                  <div className="flex items-center space-x-2">
+                    <Filter className="w-4 h-4 text-[var(--muted-foreground)]" />
+                    <span className="text-sm font-medium">Filter by folder:</span>
+                  </div>
+                  <Select value={selectedFolderId} onValueChange={setSelectedFolderId}>
+                    <SelectTrigger className="w-64">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Documents ({documents.length})</SelectItem>
+                      <SelectItem value="none">
+                        <div className="flex items-center space-x-2">
+                          <span>No Folder</span>
+                          <span className="text-[var(--muted-foreground)]">
+                            ({documents.filter(doc => !doc.folder_id).length})
+                          </span>
+                        </div>
+                      </SelectItem>
+                      {folders.map((folder) => (
+                        <SelectItem key={folder.id} value={folder.id}>
+                          <div className="flex items-center space-x-2">
+                            <Folder className="w-4 h-4" />
+                            <span>{folder.name}</span>
+                            <span className="text-[var(--muted-foreground)]">
+                              ({documents.filter(doc => doc.folder_id === folder.id).length})
+                            </span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+
             {/* Document Grid */}
-            {documents.length > 0 ? (
+            {filteredDocuments.length > 0 ? (
               <DocumentGrid
-                documents={documents}
+                documents={filteredDocuments}
+                folders={folders}
                 onDocumentView={handleDocumentView}
                 onDocumentDownload={handleDocumentDownload}
                 onDocumentDelete={handleDocumentDelete}
+                onDocumentMoveToFolder={handleDocumentMoveToFolder}
               />
+            ) : documents.length > 0 ? (
+              <Card className="text-center py-12">
+                <CardContent>
+                  <div className="text-6xl mb-4">📁</div>
+                  <h3 className="text-lg font-medium mb-2">No documents in this folder</h3>
+                  <p className="text-[var(--muted-foreground)] mb-6">
+                    Try selecting a different folder or upload new documents.
+                  </p>
+                  <Button onClick={() => setSelectedFolderId('all')}>
+                    Show All Documents
+                  </Button>
+                </CardContent>
+              </Card>
             ) : (
               <Card className="text-center py-12">
                 <CardContent>
