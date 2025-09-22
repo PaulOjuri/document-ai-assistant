@@ -20,6 +20,13 @@ const nextConfig = {
       tls: false,
     };
 
+    // Transformers.js configuration
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      "sharp$": false,
+      "onnxruntime-node$": false,
+    };
+
     return config;
   },
   // Environment variable validation

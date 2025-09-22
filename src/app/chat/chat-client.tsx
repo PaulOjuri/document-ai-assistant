@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Send, Bot, User, Upload, Save, Mic } from 'lucide-react';
+import { Send, Bot, User, Upload, Save, Mic, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/components/auth/auth-provider';
 import { ChatHistorySidebar } from '@/components/chat/chat-history-sidebar';
 import { useChatHistory } from '@/hooks/useChatHistory';
@@ -34,6 +35,7 @@ export function ChatClientPage({ contentSummary }: ChatClientProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [meetingTranscript, setMeetingTranscript] = useState('');
   const [isProcessingTranscript, setIsProcessingTranscript] = useState(false);
+  const [selectedModel, setSelectedModel] = useState<'claude' | 'huggingface'>('claude');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
   const { saveChat, currentChatId, archiveCurrentChatAndStartNew } = useChatHistory();
@@ -45,7 +47,7 @@ export function ChatClientPage({ contentSummary }: ChatClientProps) {
         role: 'assistant',
         content: `Welcome to your SAFe AI Assistant! 🤖
 
-I'm a **Claude 3.5 Sonnet powered AI agent** specialized in SAFe and Agile practices. I have access to your:
+I'm an **AI agent** specialized in SAFe and Agile practices, powered by multiple models. I have access to your:
 📄 ${contentSummary.documents} documents
 📝 ${contentSummary.notes} notes
 🎤 ${contentSummary.audios} audio recordings
@@ -108,7 +110,8 @@ ${meetingTranscript}`;
     setMessages(prev => [...prev, newMessage, aiResponse]);
 
     try {
-      const response = await fetch('/api/chat', {
+      const apiEndpoint = selectedModel === 'claude' ? '/api/chat' : '/api/chat-hf';
+      const response = await fetch(apiEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -180,7 +183,8 @@ ${meetingTranscript}`;
     setIsLoading(true);
 
     try {
-      const response = await fetch('/api/chat', {
+      const apiEndpoint = selectedModel === 'claude' ? '/api/chat' : '/api/chat-hf';
+      const response = await fetch(apiEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -270,8 +274,22 @@ ${meetingTranscript}`;
               </div>
               <div>
                 <h1 className="text-xl font-bold text-[var(--foreground)]">SAFe AI Assistant</h1>
-                <p className="text-sm text-[var(--muted-foreground)]">Claude 3 powered SAFe expert</p>
+                <p className="text-sm text-[var(--muted-foreground)]">{selectedModel === 'claude' ? 'Claude 3 powered SAFe expert' : 'Hugging Face powered SAFe expert'}</p>
               </div>
+            </div>
+
+            {/* Model Selection */}
+            <div className="flex items-center space-x-2">
+              <Settings className="w-4 h-4 text-[var(--muted-foreground)]" />
+              <Select value={selectedModel} onValueChange={(value: 'claude' | 'huggingface') => setSelectedModel(value)}>
+                <SelectTrigger className="w-[140px] h-8">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="claude">Claude 3</SelectItem>
+                  <SelectItem value="huggingface">Hugging Face</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Inline Stats */}
@@ -389,7 +407,7 @@ ${meetingTranscript}`;
                 <div className="flex items-center space-x-3 mb-2">
                   <div className="w-5 h-5 border-2 border-[var(--primary-green)] border-t-transparent rounded-full animate-spin"></div>
                   <div className="text-sm">
-                    <div className="font-medium text-[var(--foreground)]">Claude SAFe Agent</div>
+                    <div className="font-medium text-[var(--foreground)]">{selectedModel === 'claude' ? 'Claude SAFe Agent' : 'Hugging Face SAFe Agent'}</div>
                     <div className="text-xs text-[var(--muted-foreground)]">Analyzing your content and applying SAFe practices...</div>
                   </div>
                 </div>
