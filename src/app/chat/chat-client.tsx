@@ -1,10 +1,9 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Send, Bot, User, Upload, Save, Mic, Settings } from 'lucide-react';
+import { Send, Bot, User, Upload, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/components/auth/auth-provider';
@@ -33,8 +32,6 @@ export function ChatClientPage({ contentSummary }: ChatClientProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [meetingTranscript, setMeetingTranscript] = useState('');
-  const [isProcessingTranscript, setIsProcessingTranscript] = useState(false);
   const [selectedModel, setSelectedModel] = useState<'claude' | 'huggingface'>('claude');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
@@ -82,81 +79,6 @@ Ask me anything! I'll analyze your actual content to provide personalized SAFe g
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const handleProcessTranscript = async () => {
-    if (!meetingTranscript.trim() || !user) return;
-
-    setIsProcessingTranscript(true);
-
-    const prompt = `Please analyze this meeting transcript and extract action items, key decisions, and next steps. Format the response as a structured summary with clear sections for Action Items, Key Decisions, Participants, and Next Steps. Here's the transcript:
-
-${meetingTranscript}`;
-
-    // Add the transcript processing as a chat message
-    const newMessage: ChatMessage = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: 'Process meeting transcript and extract action items',
-      timestamp: new Date()
-    };
-
-    const aiMessageId = (Date.now() + 1).toString();
-    const aiResponse: ChatMessage = {
-      id: aiMessageId,
-      role: 'assistant',
-      content: '',
-      timestamp: new Date()
-    };
-
-    setMessages(prev => [...prev, newMessage, aiResponse]);
-
-    try {
-      const apiEndpoint = selectedModel === 'claude' ? '/api/chat' : '/api/chat-hf';
-      const response = await fetch(apiEndpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: prompt,
-          userId: user.id
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to process transcript');
-      }
-
-      const data = await response.json();
-
-      setMessages(prev => {
-        const updatedMessages = prev.map(msg =>
-          msg.id === aiMessageId
-            ? { ...msg, content: data.response }
-            : msg
-        );
-
-        // Auto-save chat after AI response
-        setTimeout(() => {
-          saveChat(updatedMessages, currentChatId);
-        }, 1000);
-
-        return updatedMessages;
-      });
-
-      // Clear the transcript after processing
-      setMeetingTranscript('');
-
-    } catch (error) {
-      console.error('Error processing transcript:', error);
-      setMessages(prev => prev.map(msg =>
-        msg.id === aiMessageId
-          ? { ...msg, content: 'Sorry, I encountered an error processing the meeting transcript. Please try again.' }
-          : msg
-      ));
-    } finally {
-      setIsProcessingTranscript(false);
-    }
-  };
 
   const handleSend = async (messageText?: string) => {
     const messageToSend = messageText || input.trim();
@@ -310,60 +232,6 @@ ${meetingTranscript}`;
           </div>
         </div>
 
-        {/* Meeting Transcript Section */}
-        <div className="flex-shrink-0 p-4 border-b border-[var(--border)] bg-[var(--background)]">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center space-x-2 text-sm">
-                <Mic className="w-4 h-4 text-[var(--primary-green)]" />
-                <span>Meeting Transcript Analysis</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                <Textarea
-                  placeholder="Paste your meeting transcript here. The AI will extract action items, key decisions, and next steps..."
-                  value={meetingTranscript}
-                  onChange={(e) => setMeetingTranscript(e.target.value)}
-                  rows={4}
-                  className="resize-none"
-                />
-                <div className="flex items-center justify-between">
-                  <div className="text-xs text-[var(--muted-foreground)]">
-                    {meetingTranscript.length} characters
-                  </div>
-                  <div className="flex space-x-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setMeetingTranscript('')}
-                      disabled={!meetingTranscript.trim() || isProcessingTranscript}
-                    >
-                      Clear
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={handleProcessTranscript}
-                      disabled={!meetingTranscript.trim() || isProcessingTranscript}
-                    >
-                      {isProcessingTranscript ? (
-                        <>
-                          <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                          Processing...
-                        </>
-                      ) : (
-                        <>
-                          <Save className="w-3 h-3 mr-2" />
-                          Extract Action Items
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
 
         {/* Chat Messages */}
         <div className="flex-1 overflow-y-auto p-6 space-y-4 min-h-0">

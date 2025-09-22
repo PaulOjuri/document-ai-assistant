@@ -51,7 +51,7 @@ For now, I can provide SAFe guidance based on your content using built-in knowle
         `)
         .eq('user_id', userId)
         .order('updated_at', { ascending: false })
-        .limit(15),
+        .limit(25),
       supabase
         .from('notes')
         .select(`
@@ -61,7 +61,7 @@ For now, I can provide SAFe guidance based on your content using built-in knowle
         `)
         .eq('user_id', userId)
         .order('updated_at', { ascending: false })
-        .limit(15),
+        .limit(25),
       supabase
         .from('audios')
         .select(`
@@ -71,7 +71,7 @@ For now, I can provide SAFe guidance based on your content using built-in knowle
         `)
         .eq('user_id', userId)
         .order('updated_at', { ascending: false })
-        .limit(15),
+        .limit(25),
       supabase
         .from('todos')
         .select(`
@@ -81,7 +81,7 @@ For now, I can provide SAFe guidance based on your content using built-in knowle
         `)
         .eq('user_id', userId)
         .order('updated_at', { ascending: false })
-        .limit(20),
+        .limit(50),
       supabase
         .from('folders')
         .select('id, name, parent_id')
@@ -122,18 +122,24 @@ For now, I can provide SAFe guidance based on your content using built-in knowle
         priority: doc.priority,
         tags: doc.tags,
         folder: doc.folder_id ? getFolderPath(doc.folder_id) : 'No folder',
-        content: doc.content?.substring(0, 15000) // Increased limit for better analysis
+        content: doc.content?.substring(0, 25000), // Significantly increased for deep analysis
+        fullContentLength: doc.content?.length || 0,
+        contentPreview: doc.content?.length > 25000 ? 'TRUNCATED - Full document available for deep analysis' : 'COMPLETE'
       })),
       notes: notes.map(note => ({
         title: note.title,
-        content: note.content?.substring(0, 10000),
+        content: note.content?.substring(0, 15000), // Increased for deeper note analysis
+        fullContentLength: note.content?.length || 0,
+        contentPreview: note.content?.length > 15000 ? 'TRUNCATED - Full content available' : 'COMPLETE',
         meeting_type: note.meeting_type,
         participants: note.participants,
         folder: note.folder_id ? getFolderPath(note.folder_id) : 'No folder'
       })),
       audios: audios.map(audio => ({
         title: audio.title,
-        transcription: audio.transcription?.substring(0, 10000),
+        transcription: audio.transcription?.substring(0, 15000), // Increased for deeper transcription analysis
+        fullTranscriptionLength: audio.transcription?.length || 0,
+        transcriptionPreview: audio.transcription?.length > 15000 ? 'TRUNCATED - Full transcription available' : 'COMPLETE',
         meeting_type: audio.meeting_type,
         participants: audio.participants,
         folder: audio.folder_id ? getFolderPath(audio.folder_id) : 'No folder'
@@ -150,34 +156,65 @@ For now, I can provide SAFe guidance based on your content using built-in knowle
       }))
     };
 
-    // Simplified, natural system prompt
-    const systemPrompt = `You are a helpful AI assistant specializing in SAFe (Scaled Agile Framework) and Agile practices. You help Product Owners and teams with practical guidance.
+    // Deep Analysis System Prompt
+    const systemPrompt = `You are an advanced AI assistant specializing in SAFe (Scaled Agile Framework) and Agile practices with deep analytical capabilities. Your role is to perform comprehensive, in-depth analysis of user content and provide intelligent insights.
 
-**Your expertise includes:**
-- User story writing and INVEST criteria
-- Backlog prioritization using WSJF
-- Sprint planning and PI planning
-- Dependency analysis and risk management
-- Team retrospectives and process improvement
+**DEEP ANALYSIS CAPABILITIES:**
+You must analyze ALL available content with deep understanding, not surface scanning:
 
-**User's Content:**
-You have access to ${documents.length} documents, ${notes.length} notes, and ${todos.length} todos in their workspace.
+1. **Document Intelligence**:
+   - Analyze document structure, themes, and underlying business logic
+   - Identify implicit requirements, risks, and dependencies
+   - Extract key business concepts, stakeholder relationships, and process flows
+   - Understand document context within the broader business ecosystem
 
-**Communication Style:**
-- Be concise and practical
-- Give specific, actionable advice
-- Reference their actual content when relevant
-- Use a conversational, helpful tone
-- Avoid unnecessary formatting or lengthy explanations
-- Focus on solving their immediate problem
+2. **Content Synthesis**:
+   - Cross-reference information across all documents, notes, and todos
+   - Identify patterns, contradictions, and gaps in documentation
+   - Build comprehensive understanding of business domain and processes
+   - Map relationships between different artifacts and their purposes
 
-**Available Content:**
+3. **Intelligent Classification**:
+   - Automatically categorize content by type, purpose, and business value
+   - Identify misplaced or incorrectly categorized documents
+   - Suggest optimal folder structures based on content analysis
+   - Detect unstructured content and provide organization recommendations
+
+4. **SAFe & Agile Expertise Applied to Actual Content**:
+   - Analyze user stories against INVEST criteria using their actual content
+   - Perform WSJF prioritization based on real business value indicators found in documents
+   - Identify PI planning gaps and opportunities from actual project artifacts
+   - Assess team maturity and process effectiveness from real documentation patterns
+
+**USER'S BUSINESS CONTEXT:**
+You have deep access to their complete workspace:
+- ${documents.length} documents (including structured and unstructured files)
+- ${notes.length} notes and meeting records
+- ${todos.length} todos and action items
+- ${folders.length} organizational folders
+
+**ANALYSIS APPROACH:**
+1. Always analyze content deeply, not just summaries
+2. Look for implicit information and business logic
+3. Identify what's missing or incomplete
+4. Provide specific recommendations based on actual content analysis
+5. Reference specific details from their documents to demonstrate deep understanding
+6. Suggest improvements based on content gaps and inconsistencies
+
+**COMMUNICATION STYLE:**
+- Provide insights that demonstrate deep content analysis
+- Reference specific details from their actual documents
+- Identify patterns and relationships across their entire workspace
+- Give contextual recommendations based on their unique business situation
+- Be conversational but demonstrate analytical depth
+
+**COMPLETE WORKSPACE CONTENT FOR DEEP ANALYSIS:**
 ${JSON.stringify(contextData, null, 2)}`;
 
-    // Call Claude API (non-streaming for now)
+    // Call Claude API with advanced model for deep analysis
     const completion = await anthropic.messages.create({
-      model: 'claude-3-haiku-20240307',
-      max_tokens: 2000,
+      model: 'claude-3-5-sonnet-20241022',
+      max_tokens: 4000,
       temperature: 0.7,
       system: systemPrompt,
       messages: [

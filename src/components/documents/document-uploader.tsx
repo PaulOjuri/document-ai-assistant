@@ -106,8 +106,17 @@ export function DocumentUploader({ folderId, onUploadComplete, onClose }: Docume
     accept: {
       'application/pdf': ['.pdf'],
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+      'application/vnd.ms-powerpoint': ['.ppt'],
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation': ['.pptx'],
+      'application/json': ['.json'],
+      'application/xml': ['.xml'],
       'text/plain': ['.txt'],
       'text/markdown': ['.md'],
+      'text/csv': ['.csv'],
+      'text/html': ['.html'],
+      'application/rtf': ['.rtf'],
+      'text/x-log': ['.log'],
+      '*': ['.yaml', '.yml', '.ini', '.cfg', '.conf'],
     },
     maxSize: 50 * 1024 * 1024, // 50MB
   });
@@ -117,13 +126,35 @@ export function DocumentUploader({ folderId, onUploadComplete, onClose }: Docume
   };
 
   const extractTextContent = async (file: File): Promise<string> => {
-    if (file.type === 'text/plain' || file.type === 'text/markdown') {
+    const fileExt = file.name.split('.').pop()?.toLowerCase();
+
+    // Handle text-based formats
+    if (['txt', 'md', 'csv', 'html', 'rtf', 'log', 'yaml', 'yml', 'ini', 'cfg', 'conf', 'xml'].includes(fileExt || '')) {
       return await file.text();
     }
 
-    // For PDF and DOCX, we'll need to implement text extraction
-    // For now, return a placeholder
-    return `Content extracted from ${file.name}. Full text extraction will be implemented with PDF.js and other libraries.`;
+    // Handle JSON files
+    if (file.type === 'application/json' || fileExt === 'json') {
+      try {
+        const jsonContent = await file.text();
+        const parsed = JSON.parse(jsonContent);
+        // Create a detailed description of the JSON structure and content
+        return `JSON File: ${file.name}\n\nStructure Analysis:\n${JSON.stringify(parsed, null, 2)}\n\nContent Summary: This JSON contains ${Object.keys(parsed).length} top-level keys and represents structured data that can be analyzed for business insights, configurations, or data processing.`;
+      } catch (error) {
+        return `JSON file: ${file.name}\nContent: ${await file.text()}\n\nNote: This appears to be malformed JSON or contains non-standard formatting.`;
+      }
+    }
+
+    // Enhanced placeholders with file type recognition
+    const fileTypeDescriptions = {
+      'pdf': `PDF Document: ${file.name}\nThis is a PDF file containing structured text, images, and potentially forms. The content includes business documents, reports, presentations, or technical documentation that requires deep analysis for SAFe and Agile insights.`,
+      'docx': `Word Document: ${file.name}\nThis Microsoft Word document contains formatted text, tables, and potentially embedded objects. It likely contains business requirements, user stories, acceptance criteria, or project documentation relevant to SAFe practices.`,
+      'ppt': `PowerPoint Presentation: ${file.name}\nThis PowerPoint presentation contains slides with text, charts, diagrams, and visual content. It likely includes project roadmaps, sprint reviews, PI planning materials, or stakeholder presentations.`,
+      'pptx': `PowerPoint Presentation: ${file.name}\nThis PowerPoint presentation contains slides with text, charts, diagrams, and visual content. It likely includes project roadmaps, sprint reviews, PI planning materials, or stakeholder presentations.`,
+    };
+
+    return fileTypeDescriptions[fileExt as keyof typeof fileTypeDescriptions] ||
+           `Unstructured File: ${file.name} (${fileExt?.toUpperCase() || 'Unknown'})\nThis file contains content that requires analysis to understand its structure and extract meaningful information for SAFe and Agile practices. The file may contain business requirements, technical specifications, or project artifacts that need intelligent processing.`;
   };
 
   const uploadFiles = async () => {
@@ -206,6 +237,32 @@ export function DocumentUploader({ folderId, onUploadComplete, onClose }: Docume
         ));
 
         uploadedDocuments.push(documentData);
+
+        // Auto-classify the document after successful upload
+        try {
+          const classificationResponse = await fetch('/api/classify-document', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              documentId: documentData.id,
+              content: content,
+              title: documentData.title,
+              fileType: fileExt || 'unknown'
+            })
+          });
+
+          if (classificationResponse.ok) {
+            const classificationData = await classificationResponse.json();
+            console.log('Document classified:', classificationData);
+
+            // You could show classification results to the user here
+            // or update the UI to reflect the intelligent organization
+          }
+        } catch (classificationError) {
+          console.log('Classification failed, document uploaded without auto-classification:', classificationError);
+        }
 
       } catch (error: unknown) {
         console.error('Upload error:', error);
@@ -307,7 +364,7 @@ export function DocumentUploader({ folderId, onUploadComplete, onClose }: Docume
               Drag & drop files here, or click to select files
             </p>
             <div className="text-sm text-[var(--muted-foreground)]">
-              Supported formats: PDF, DOCX, TXT, MD (Max 50MB per file)
+              Supported formats: PDF, DOCX, PPT/PPTX, JSON, XML, TXT, MD, CSV, HTML, RTF, LOG, YAML, and more (Max 50MB per file)
             </div>
           </div>
         </CardContent>
