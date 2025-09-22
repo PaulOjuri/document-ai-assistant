@@ -60,7 +60,7 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getSession();
 
   // Protected routes
-  const protectedPaths = ['/documents', '/notes', '/audio', '/dashboard'];
+  const protectedPaths = ['/documents', '/notes', '/audio', '/dashboard', '/chat'];
   const isProtectedPath = protectedPaths.some(path =>
     request.nextUrl.pathname.startsWith(path)
   );

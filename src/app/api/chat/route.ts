@@ -35,9 +35,21 @@ For now, I can provide SAFe guidance based on your content using built-in knowle
     const supabase = await createSupabaseServerClient();
 
     // Verify user authentication
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user || user.id !== userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError) {
+      console.error('Authentication error:', authError);
+      return NextResponse.json({ error: 'Authentication failed' }, { status: 401 });
+    }
+
+    if (!user) {
+      console.error('No user found in session');
+      return NextResponse.json({ error: 'No authenticated user' }, { status: 401 });
+    }
+
+    if (user.id !== userId) {
+      console.error('User ID mismatch:', { sessionUserId: user.id, requestUserId: userId });
+      return NextResponse.json({ error: 'User ID mismatch' }, { status: 401 });
     }
 
     // Fetch user's content for context with folder information
