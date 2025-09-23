@@ -9,9 +9,12 @@ const anthropic = new Anthropic({
 
 export async function POST(request: NextRequest) {
   try {
+    console.log('Chat API: Request received');
     const { message, userId } = await request.json();
+    console.log('Chat API: Parsed request body', { messageLength: message?.length, userId });
 
     if (!message || !userId) {
+      console.log('Chat API: Missing message or userId');
       return NextResponse.json(
         { error: 'Message and userId are required' },
         { status: 400 }
@@ -32,10 +35,14 @@ For now, I can provide SAFe guidance based on your content using built-in knowle
       });
     }
 
+    console.log('Chat API: Creating Supabase server client');
     const supabase = await createSupabaseServerClient();
+    console.log('Chat API: Supabase client created');
 
     // Verify user authentication
+    console.log('Chat API: Getting user from Supabase auth');
     const { data: { user }, error: authError } = await supabase.auth.getUser();
+    console.log('Chat API: Auth result', { user: user?.id, error: authError?.message });
 
     if (authError) {
       console.error('Authentication error:', authError);
@@ -168,64 +175,36 @@ For now, I can provide SAFe guidance based on your content using built-in knowle
       }))
     };
 
-    // Deep Analysis System Prompt
-    const systemPrompt = `You are an advanced AI assistant specializing in SAFe (Scaled Agile Framework) and Agile practices with deep analytical capabilities. Your role is to perform comprehensive, in-depth analysis of user content and provide intelligent insights.
+    // Deep Analysis System Prompt - Optimized for Claude Haiku
+    const systemPrompt = `You are a SAFe/Agile expert and intelligent document analyst. Perform focused, deep analysis of user content with practical insights.
 
-**DEEP ANALYSIS CAPABILITIES:**
-You must analyze ALL available content with deep understanding, not surface scanning:
+**CORE CAPABILITIES:**
+1. **Smart Document Analysis**: Extract key themes, requirements, risks, and business logic from actual content
+2. **Pattern Recognition**: Identify relationships, gaps, and opportunities across all user artifacts
+3. **SAFe Expertise**: Apply INVEST criteria, WSJF prioritization, PI planning principles to real content
+4. **Organization Intelligence**: Suggest better folder structures and content categorization
 
-1. **Document Intelligence**:
-   - Analyze document structure, themes, and underlying business logic
-   - Identify implicit requirements, risks, and dependencies
-   - Extract key business concepts, stakeholder relationships, and process flows
-   - Understand document context within the broader business ecosystem
+**USER'S WORKSPACE:** ${documents.length} docs, ${notes.length} notes, ${todos.length} todos, ${folders.length} folders
 
-2. **Content Synthesis**:
-   - Cross-reference information across all documents, notes, and todos
-   - Identify patterns, contradictions, and gaps in documentation
-   - Build comprehensive understanding of business domain and processes
-   - Map relationships between different artifacts and their purposes
+**ANALYSIS FOCUS:**
+- Reference specific content details to demonstrate deep understanding
+- Identify missing elements and process gaps
+- Cross-reference information across artifacts
+- Provide actionable SAFe/Agile recommendations
+- Suggest concrete improvements based on actual content patterns
 
-3. **Intelligent Classification**:
-   - Automatically categorize content by type, purpose, and business value
-   - Identify misplaced or incorrectly categorized documents
-   - Suggest optimal folder structures based on content analysis
-   - Detect unstructured content and provide organization recommendations
+**RESPONSE STYLE:**
+- Lead with specific insights from their actual documents
+- Demonstrate content synthesis across their workspace
+- Provide contextual recommendations for their unique situation
+- Be conversational yet analytically precise
 
-4. **SAFe & Agile Expertise Applied to Actual Content**:
-   - Analyze user stories against INVEST criteria using their actual content
-   - Perform WSJF prioritization based on real business value indicators found in documents
-   - Identify PI planning gaps and opportunities from actual project artifacts
-   - Assess team maturity and process effectiveness from real documentation patterns
-
-**USER'S BUSINESS CONTEXT:**
-You have deep access to their complete workspace:
-- ${documents.length} documents (including structured and unstructured files)
-- ${notes.length} notes and meeting records
-- ${todos.length} todos and action items
-- ${folders.length} organizational folders
-
-**ANALYSIS APPROACH:**
-1. Always analyze content deeply, not just summaries
-2. Look for implicit information and business logic
-3. Identify what's missing or incomplete
-4. Provide specific recommendations based on actual content analysis
-5. Reference specific details from their documents to demonstrate deep understanding
-6. Suggest improvements based on content gaps and inconsistencies
-
-**COMMUNICATION STYLE:**
-- Provide insights that demonstrate deep content analysis
-- Reference specific details from their actual documents
-- Identify patterns and relationships across their entire workspace
-- Give contextual recommendations based on their unique business situation
-- Be conversational but demonstrate analytical depth
-
-**COMPLETE WORKSPACE CONTENT FOR DEEP ANALYSIS:**
+**WORKSPACE CONTENT:**
 ${JSON.stringify(contextData, null, 2)}`;
 
     // Call Claude API with advanced model for deep analysis
     const completion = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
+      model: 'claude-3-haiku-20240307',
       max_tokens: 4000,
       temperature: 0.7,
       system: systemPrompt,

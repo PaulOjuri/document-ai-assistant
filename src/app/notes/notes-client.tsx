@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { FileText, Plus, Search, Filter, Save, X, Folder, FolderPlus } from 'lucide-react';
+import { FileText, Plus, Search, Filter, Save, X, Folder, FolderPlus, Eye, Edit, Trash2 } from 'lucide-react';
 import { useAuth } from '@/components/auth/auth-provider';
 
 interface Note {
@@ -144,6 +144,13 @@ export function NotesClientPage({ initialNotes }: NotesClientProps) {
   const [folders, setFolders] = useState<Folder[]>([]);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isCreateFolderDialogOpen, setIsCreateFolderDialogOpen] = useState(false);
+  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [selectedNote, setSelectedNote] = useState<Note | null>(null);
+  const [editNoteTitle, setEditNoteTitle] = useState('');
+  const [editNoteContent, setEditNoteContent] = useState('');
+  const [editNoteFolder, setEditNoteFolder] = useState<string>('no-folder');
+  const [editCustomDate, setEditCustomDate] = useState<string>('');
   const [newNoteTitle, setNewNoteTitle] = useState('');
   const [newNoteContent, setNewNoteContent] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState<string>('');
@@ -269,6 +276,103 @@ export function NotesClientPage({ initialNotes }: NotesClientProps) {
     setSelectedTemplate('');
     setSelectedFolder('');
     setCustomDate('');
+  };
+
+  const handleOpenNote = (note: Note) => {
+    setSelectedNote(note);
+    setIsViewDialogOpen(true);
+  };
+
+  const handleEditNote = (note: Note) => {
+    setSelectedNote(note);
+    setEditNoteTitle(note.title);
+    setEditNoteContent(note.content);
+    setEditNoteFolder(note.folder_id || 'no-folder');
+    setEditCustomDate(note.custom_date || '');
+    setIsEditDialogOpen(true);
+  };
+
+  const handleUpdateNote = async () => {
+    if (!user || !selectedNote || !editNoteTitle.trim() || !editNoteContent.trim()) return;
+
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('notes')
+        .update({
+          title: editNoteTitle.trim(),
+          content: editNoteContent.trim(),
+          folder_id: editNoteFolder === 'no-folder' ? null : editNoteFolder || null,
+          custom_date: editCustomDate || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', selectedNote.id)
+        .eq('user_id', user.id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error updating note:', error);
+      } else {
+        // Update the note in the list
+        setNotes(prevNotes =>
+          prevNotes.map(note =>
+            note.id === selectedNote.id ? { ...note, ...data } : note
+          )
+        );
+
+        // Reset form
+        setEditNoteTitle('');
+        setEditNoteContent('');
+        setEditNoteFolder('no-folder');
+        setEditCustomDate('');
+        setIsEditDialogOpen(false);
+        setSelectedNote(null);
+
+        // Refresh to get server-side data
+        router.refresh();
+      }
+    } catch (error) {
+      console.error('Error updating note:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDeleteNote = async (note: Note) => {
+    if (!user) return;
+
+    if (!confirm(`Are you sure you want to delete "${note.title}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const { error } = await supabase
+        .from('notes')
+        .delete()
+        .eq('id', note.id)
+        .eq('user_id', user.id);
+
+      if (error) {
+        console.error('Error deleting note:', error);
+      } else {
+        // Remove the note from the list
+        setNotes(prevNotes => prevNotes.filter(n => n.id !== note.id));
+
+        // Close any open dialogs
+        setIsViewDialogOpen(false);
+        setIsEditDialogOpen(false);
+        setSelectedNote(null);
+
+        // Refresh to get server-side data
+        router.refresh();
+      }
+    } catch (error) {
+      console.error('Error deleting note:', error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Fetch folders on component mount
@@ -584,9 +688,33 @@ export function NotesClientPage({ initialNotes }: NotesClientProps) {
                             )}
                           </div>
                         </div>
-                        <Button size="sm" variant="outline">
-                          Open
-                        </Button>
+                        <div className="flex space-x-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleOpenNote(note)}
+                          >
+                            <Eye className="w-4 h-4 mr-2" />
+                            View
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleEditNote(note)}
+                          >
+                            <Edit className="w-4 h-4 mr-2" />
+                            Edit
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleDeleteNote(note)}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          >
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            Delete
+                          </Button>
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
@@ -595,6 +723,179 @@ export function NotesClientPage({ initialNotes }: NotesClientProps) {
             )}
           </CardContent>
         </Card>
+
+        {/* Note View Dialog */}
+        <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
+          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center space-x-2">
+                <Eye className="w-5 h-5" />
+                <span>{selectedNote?.title}</span>
+              </DialogTitle>
+            </DialogHeader>
+
+            {selectedNote && (
+              <div className="space-y-4">
+                {/* Note Metadata */}
+                <div className="flex items-center space-x-4 text-sm text-[var(--muted-foreground)] border-b pb-4">
+                  <span>Created: {new Date(selectedNote.created_at).toLocaleDateString()}</span>
+                  <span>Updated: {new Date(selectedNote.updated_at).toLocaleDateString()}</span>
+                  {selectedNote.custom_date && (
+                    <span className="flex items-center">
+                      📅 {new Date(selectedNote.custom_date).toLocaleDateString()}
+                    </span>
+                  )}
+                  {selectedNote.folder_id && (
+                    <span className="bg-[var(--accent-blue)] text-white px-2 py-1 rounded flex items-center">
+                      <Folder className="w-3 h-3 mr-1" />
+                      {folders.find(f => f.id === selectedNote.folder_id)?.name || 'Unknown Folder'}
+                    </span>
+                  )}
+                  {selectedNote.template && (
+                    <span className="bg-[var(--primary-green)] text-white px-2 py-1 rounded">
+                      {SAFE_TEMPLATES.find(t => t.id === selectedNote.template)?.name || selectedNote.template}
+                    </span>
+                  )}
+                </div>
+
+                {/* Note Content */}
+                <div className="prose max-w-none">
+                  <div className="bg-[var(--muted)] p-4 rounded-lg">
+                    <pre className="whitespace-pre-wrap font-mono text-sm text-[var(--foreground)]">
+                      {selectedNote.content}
+                    </pre>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex justify-between space-x-3 pt-4 border-t">
+                  <div className="flex space-x-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setIsViewDialogOpen(false);
+                        handleEditNote(selectedNote);
+                      }}
+                    >
+                      <Edit className="w-4 h-4 mr-2" />
+                      Edit Note
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => handleDeleteNote(selectedNote)}
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Delete Note
+                    </Button>
+                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={() => setIsViewDialogOpen(false)}
+                  >
+                    Close
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Note Edit Dialog */}
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center space-x-2">
+                <Edit className="w-5 h-5" />
+                <span>Edit Note</span>
+              </DialogTitle>
+            </DialogHeader>
+
+            {selectedNote && (
+              <div className="space-y-4">
+                {/* Folder Selection */}
+                <div>
+                  <label className="text-sm font-medium mb-2 block">
+                    Folder (optional)
+                  </label>
+                  <Select value={editNoteFolder} onValueChange={setEditNoteFolder}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a folder or leave blank" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="no-folder">No Folder</SelectItem>
+                      {folders.map((folder) => (
+                        <SelectItem key={folder.id} value={folder.id}>
+                          {folder.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Custom Date */}
+                <div>
+                  <label className="text-sm font-medium mb-2 block">
+                    Date (optional)
+                  </label>
+                  <Input
+                    type="date"
+                    value={editCustomDate}
+                    onChange={(e) => setEditCustomDate(e.target.value)}
+                    placeholder="Select a date for this note"
+                  />
+                </div>
+
+                {/* Title */}
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Title</label>
+                  <Input
+                    value={editNoteTitle}
+                    onChange={(e) => setEditNoteTitle(e.target.value)}
+                    placeholder="Enter note title..."
+                  />
+                </div>
+
+                {/* Content */}
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Content</label>
+                  <Textarea
+                    value={editNoteContent}
+                    onChange={(e) => setEditNoteContent(e.target.value)}
+                    placeholder="Edit your note content..."
+                    rows={15}
+                    className="font-mono text-sm"
+                  />
+                </div>
+
+                {/* Actions */}
+                <div className="flex justify-end space-x-3 pt-4 border-t">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setIsEditDialogOpen(false);
+                      setEditNoteTitle('');
+                      setEditNoteContent('');
+                      setEditNoteFolder('no-folder');
+                      setEditCustomDate('');
+                      setSelectedNote(null);
+                    }}
+                  >
+                    <X className="w-4 h-4 mr-2" />
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleUpdateNote}
+                    disabled={isLoading || !editNoteTitle.trim() || !editNoteContent.trim()}
+                  >
+                    <Save className="w-4 h-4 mr-2" />
+                    {isLoading ? 'Saving...' : 'Save Changes'}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </MainLayout>
   );

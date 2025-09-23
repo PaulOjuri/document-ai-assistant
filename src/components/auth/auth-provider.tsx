@@ -46,21 +46,26 @@ export function AuthProvider({ children }: AuthProviderProps) {
     // Get initial session
     const getInitialSession = async () => {
       try {
+        console.log('AuthProvider: Getting initial session...');
         const {
           data: { session },
         } = await supabase.auth.getSession();
+
+        console.log('AuthProvider: Session result', { hasSession: !!session, userId: session?.user?.id });
 
         if (mounted) {
           setSession(session);
           setUser(session?.user ?? null);
           setLoading(false);
           setInitialLoad(false);
+          console.log('AuthProvider: Set loading to false');
         }
       } catch (error) {
-        console.error('Error getting session:', error);
+        console.error('AuthProvider: Error getting session:', error);
         if (mounted) {
           setLoading(false);
           setInitialLoad(false);
+          console.log('AuthProvider: Set loading to false (error case)');
         }
       }
     };
